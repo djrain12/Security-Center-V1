@@ -29,8 +29,8 @@ Seeded accounts (change the password after first login):
 
 | Email | Password | Role |
 | --- | --- | --- |
-| michael.adams@wsi.local | Admin@2026 | Master Admin |
-| tara.singh@wsi.local | Admin@2026 | IT Security Officer |
+| admin@gmail.com | Admin@2026 | Master Admin |
+| user@gmail.com | Admin@2026 | IT Security Officer |
 
 ## What's in the database
 
