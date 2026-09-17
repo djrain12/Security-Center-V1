@@ -1,0 +1,6 @@
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+export async function GET() { return NextResponse.json(await prisma.networkZone.findMany({ where: { enabled: true }, orderBy: { name: 'asc' } })); }
+export async function POST(request: Request) { const body = await request.json(); if (!body.name || !body.cidr || !body.gateway) return NextResponse.json({ error: 'Name, CIDR, and gateway are required.' }, { status: 400 }); return NextResponse.json(await prisma.networkZone.create({ data: { name: body.name, cidr: body.cidr, gateway: body.gateway } }), { status: 201 }); }
+export async function PATCH(request: Request) { const body = await request.json(); if (!body.id || !body.name || !body.cidr || !body.gateway) return NextResponse.json({ error: 'Id, name, CIDR, and gateway are required.' }, { status: 400 }); return NextResponse.json(await prisma.networkZone.update({ where: { id: Number(body.id) }, data: { name: body.name, cidr: body.cidr, gateway: body.gateway } })); }
+export async function DELETE(request: Request) { const { id } = await request.json(); await prisma.networkZone.update({ where: { id: Number(id) }, data: { enabled: false } }); return NextResponse.json({ deleted: true }); }

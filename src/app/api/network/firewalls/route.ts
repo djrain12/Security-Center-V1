@@ -1,0 +1,5 @@
+import { NextResponse } from 'next/server';
+import { prisma } from '@/lib/prisma';
+export async function GET() { const items = await prisma.firewallMonitor.findMany({ orderBy: { name: 'asc' }, include: { healthChecks: { orderBy: { checkedAt: 'desc' }, take: 5 } } }); return NextResponse.json(items.map(item => ({ ...item, healthChecks: item.healthChecks.map(check => ({ ...check, id: check.id.toString() })) }))); }
+export async function POST(request: Request) { const body = await request.json(); if (!body.name || !body.host) return NextResponse.json({ error: 'Firewall name and host are required.' }, { status: 400 }); const item = await prisma.firewallMonitor.create({ data: { name: body.name, host: body.host, vendor: body.vendor || null } }); return NextResponse.json(item, { status: 201 }); }
+export async function DELETE(request: Request) { const { id } = await request.json(); if (!id) return NextResponse.json({ error: 'Firewall id is required.' }, { status: 400 }); await prisma.firewallMonitor.delete({ where: { id: Number(id) } }); return NextResponse.json({ deleted: true }); }

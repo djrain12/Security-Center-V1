@@ -1,0 +1,409 @@
+generator client {
+	provider = "prisma-client-js"
+}
+
+datasource db {
+	provider          = "mysql"
+	url               = env("DATABASE_URL")
+	shadowDatabaseUrl = env("SHADOW_DATABASE_URL")
+}
+
+enum UserStatus {
+	ACTIVE
+	INACTIVE
+}
+enum AssetType {
+	SERVER
+	ENDPOINT
+	NETWORK
+	APPLICATION
+	CLOUD
+}
+enum Severity {
+	CRITICAL
+	HIGH
+	MEDIUM
+	LOW
+}
+enum IncidentStatus {
+	OPEN
+	INVESTIGATING
+	CONTAINED
+	RESOLVED
+}
+enum VulnerabilityStatus {
+	OPEN
+	IN_PROGRESS
+	MITIGATED
+	ACCEPTED
+	CLOSED
+}
+enum RiskStatus {
+	OPEN
+	TREATING
+	ACCEPTED
+	CLOSED
+}
+enum ActionStatus {
+	OPEN
+	IN_PROGRESS
+	BLOCKED
+	COMPLETE
+}
+enum AccessLevel {
+	MASTER_ADMIN
+	ADMIN
+	IT_SECURITY_OFFICER
+	IT_USER
+}
+
+model Role {
+	id Int @id @default(autoincrement())
+	name String @unique
+	description String
+	canViewConfidential Boolean @default(false)
+	users User[]
+}
+
+model User {
+	id Int @id @default(autoincrement())
+	roleId Int
+	fullName String
+	email String @unique
+	department String
+	birthday DateTime?
+	contactNumber String?
+	address String?
+	photoUrl String?
+	accessLevel AccessLevel @default(IT_USER)
+	passwordHash String?
+	mfaEnabled Boolean @default(false)
+	status UserStatus @default(ACTIVE)
+	createdAt DateTime @default(now())
+	role Role @relation(fields: [roleId], references: [id])
+	incidents SecurityIncident[]
+	assignedVulnerabilities Vulnerability[]
+	risks Risk[]
+	activities SecurityActivity[]
+	actions CorrectiveAction[]
+	auditLogs AuditLog[]
+	modulePermissions UserModulePermission[]
+}
+
+model UserModulePermission {
+	id Int @id @default(autoincrement())
+	userId Int
+	moduleName String
+	allowed Boolean @default(false)
+	updatedAt DateTime @updatedAt
+	user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+	@@unique([userId, moduleName])
+}
+
+model SecurityAsset {
+	id Int @id @default(autoincrement())
+	assetTag String @unique
+	name String
+	assetType AssetType
+	ownerDepartment String
+	criticality Severity
+	protectionStatus String @default("protected")
+	lastAssessedAt DateTime?
+	incidents SecurityIncident[]
+	vulnerabilities Vulnerability[]
+}
+
+model MonitoredServer {
+	id Int @id @default(autoincrement())
+	name String
+	host String
+	serverType String
+	environment String @default("Production")
+	status String @default("unknown")
+	responseMs Int?
+	lastCheckedAt DateTime?
+	monitoringEnabled Boolean @default(true)
+	createdAt DateTime @default(now())
+	healthChecks ServerHealthCheck[]
+}
+
+model NetworkDevice {
+	id Int @id @default(autoincrement())
+	ipAddress String @unique
+	name String?
+	deviceType String @default("unknown")
+	vlanId Int?
+	zoneName String?
+	macAddress String?
+	status String @default("unknown")
+	responseMs Int?
+	lastScannedAt DateTime?
+	createdAt DateTime @default(now())
+}
+
+model NetworkZone {
+	id Int @id @default(autoincrement())
+	name String
+	cidr String @unique
+	gateway String
+	enabled Boolean @default(true)
+	createdAt DateTime @default(now())
+}
+
+model TrafficLog {
+	id BigInt @id @default(autoincrement())
+	sourceIp String?
+	destinationIp String?
+	destinationPort Int?
+	protocol String?
+	action String?
+	interfaceName String?
+	rawMessage String @db.Text
+	loggedAt DateTime @default(now())
+	@@index([sourceIp, loggedAt])
+	@@index([loggedAt])
+}
+
+model FirewallMonitor {
+	id Int @id @default(autoincrement())
+	name String
+	host String
+	vendor String?
+	status String @default("unknown")
+	responseMs Int?
+	temperature String?
+	lastCheckedAt DateTime?
+	monitoringEnabled Boolean @default(true)
+	createdAt DateTime @default(now())
+	healthChecks FirewallHealthCheck[]
+}
+
+model PfSenseConnection {
+	id Int @id @default(1)
+	name String @default("Primary pfSense")
+	baseUrl String
+	encryptedApiKey String
+	encryptedApiSecret String
+	encryptedUsername String?
+	encryptedPassword String?
+	statusPath String @default("/api/v2/status/system")
+	updatedAt DateTime @updatedAt
+}
+
+model FirewallHealthCheck {
+	id BigInt @id @default(autoincrement())
+	firewallId Int
+	status String
+	responseMs Int?
+	checkedAt DateTime @default(now())
+	details String?
+	firewall FirewallMonitor @relation(fields: [firewallId], references: [id], onDelete: Cascade)
+	@@index([firewallId, checkedAt])
+}
+
+model ServerHealthCheck {
+	id BigInt @id @default(autoincrement())
+	serverId Int
+	status String
+	responseMs Int?
+	checkedAt DateTime @default(now())
+	details String?
+	server MonitoredServer @relation(fields: [serverId], references: [id], onDelete: Cascade)
+	@@index([serverId, checkedAt])
+}
+
+model SecurityIncident {
+	id Int @id @default(autoincrement())
+	incidentCode String @unique
+	title String
+	severity Severity
+	status IncidentStatus @default(OPEN)
+	assignedTo Int?
+	affectedAssetId Int?
+	detectedAt DateTime
+	resolvedAt DateTime?
+	assignee User? @relation(fields: [assignedTo], references: [id])
+	affectedAsset SecurityAsset? @relation(fields: [affectedAssetId], references: [id])
+}
+
+model Vulnerability {
+	id Int @id @default(autoincrement())
+	cveId String?
+	title String
+	severity Severity
+	status VulnerabilityStatus @default(OPEN)
+	assetId Int
+	dueDate DateTime?
+	ownerId Int?
+	asset SecurityAsset @relation(fields: [assetId], references: [id])
+	owner User? @relation(fields: [ownerId], references: [id])
+}
+
+model Risk {
+	id Int @id @default(autoincrement())
+	riskCode String @unique
+	title String
+	rating Severity
+	status RiskStatus @default(OPEN)
+	ownerId Int?
+	treatmentDue DateTime?
+	owner User? @relation(fields: [ownerId], references: [id])
+}
+
+model ComplianceFramework {
+	id Int @id @default(autoincrement())
+	name String @unique
+	readinessPercent Decimal @db.Decimal(5, 2)
+	nextReviewDate DateTime?
+}
+
+model SecurityActivity {
+	id Int @id @default(autoincrement())
+	name String
+	category String
+	completionPercent Int
+	ownerId Int?
+	owner User? @relation(fields: [ownerId], references: [id])
+}
+
+model CorrectiveAction {
+	id Int @id @default(autoincrement())
+	title String
+	sourceType String
+	sourceId Int
+	ownerId Int?
+	status ActionStatus @default(OPEN)
+	dueDate DateTime?
+	owner User? @relation(fields: [ownerId], references: [id])
+}
+
+model AuditLog {
+	id BigInt @id @default(autoincrement())
+	actorId Int?
+	action String
+	resourceType String
+	resourceId String?
+	metadata Json?
+	createdAt DateTime @default(now())
+	actor User? @relation(fields: [actorId], references: [id])
+}
+
+// ---- App record store (generic modules) ----
+model ModuleRecord {
+	id String @id
+	module String
+	title String
+	tag String @default("Info")
+	meta String @default("")
+	detail String @db.Text
+	attachmentName String?
+	attachmentType String?
+	attachmentData String? @db.LongText
+	createdAt DateTime @default(now())
+	@@index([module])
+}
+
+model InventoryDevice {
+	id String @id
+	assetTag String @unique
+	deviceType String
+	brand String
+	model String
+	serialNumber String @default("")
+	status String @default("Good")
+	deployed Boolean @default(false)
+	assignedTo String @default("")
+}
+
+model BackupJob {
+	id String @id
+	jobName String
+	backupType String @default("Full")
+	schedule String @default("")
+	target String @default("")
+	status String @default("Healthy")
+	lastRun String @default("")
+	retention String @default("30 days")
+	attachmentName String?
+	attachmentData String? @db.LongText
+}
+
+model LibraryDocument {
+	id String @id
+	name String
+	category String @default("Policy")
+	framework String @default("General")
+	status String @default("Draft")
+	size String @default("—")
+	uploadedAt String @default("")
+	dataUrl String? @db.LongText
+}
+
+model EmailAccount {
+	id String @id
+	date String @default("")
+	employeeName String
+	verifyName String @default("")
+	userType String @default("New")
+	status String @default("Active")
+	personalEmail String @default("")
+	personalPassword String @default("")
+	wsiEmail String @default("")
+	wsiPassword String @default("")
+	company String @default("")
+	remarks String @default("")
+}
+
+model DailyReportEntry {
+	id String @id
+	date String
+	employeeName String
+	department String @default("")
+	timeIn String @default("")
+	timeOut String @default("")
+	tasks String @db.Text
+	accomplishments String? @db.Text
+	issues String? @db.Text
+	status String @default("Submitted")
+	attachmentName String?
+	attachmentData String? @db.LongText
+}
+
+model CctvDevice {
+	id String @id
+	name String
+	location String @default("")
+	ipAddress String @default("")
+	model String @default("")
+	status String @default("Online")
+	lastService String @default("")
+	streamUrl String @default("")
+	username String @default("")
+	password String @default("")
+}
+
+model ChatRoom {
+	id String @id
+	name String
+	isGroup Boolean @default(false)
+	members String @db.Text
+	createdAt DateTime @default(now())
+}
+
+model ChatMessage {
+	id String @id
+	roomId String
+	senderName String
+	text String @db.Text
+	fileName String?
+	fileType String?
+	fileData String? @db.LongText
+	createdAt DateTime @default(now())
+	@@index([roomId])
+}
+
+model AppSetting {
+	key String @id
+	value String @db.Text
+}
