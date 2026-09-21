@@ -25,12 +25,11 @@ Open http://localhost:3000.
 
 ### Default sign-in
 
-Seeded accounts (change the password after first login):
+The database seeds a single Master Admin account for initial access. The seeded password is managed in the app database and should be rotated after first login.
 
-| Email | Password | Role |
-| --- | --- | --- |
-| michael.adams@wsi.local | Admin@2026 | Master Admin |
-| tara.singh@wsi.local | Admin@2026 | IT Security Officer |
+| Role | Account |
+| --- | --- |
+| Master Admin | master.admin@wsi.local |
 
 ## What's in the database
 

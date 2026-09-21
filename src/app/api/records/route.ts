@@ -13,9 +13,15 @@ export async function GET(request: Request) {
 export async function POST(request: Request) {
   const body = await request.json();
   if (!body.module || !body.title) return NextResponse.json({ error: 'module and title are required.' }, { status: 400 });
+  const createId = () => {
+    const cryptoModule = globalThis.crypto as Crypto & { randomUUID?: () => string };
+    if (typeof cryptoModule?.randomUUID === 'function') return cryptoModule.randomUUID();
+    return `${body.module}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  };
+
   const record = await prisma.moduleRecord.create({
     data: {
-      id: body.id || `${body.module}-${Date.now()}`,
+      id: body.id || createId(),
       module: body.module,
       title: body.title,
       tag: body.tag || 'Info',

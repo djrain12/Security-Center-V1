@@ -4,11 +4,14 @@ import bcrypt from 'bcryptjs';
 
 export async function POST(request: Request) {
   const body = await request.json();
-  const email = String(body.email || '').trim().toLowerCase();
+  const requestedEmail = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
-  if (!email || !password) return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
+  if (!requestedEmail || !password) return NextResponse.json({ error: 'Email and password are required.' }, { status: 400 });
 
-  const user = await prisma.user.findUnique({ where: { email }, include: { role: true, modulePermissions: true } });
+  const user = await prisma.user.findFirst({
+    where: { email: requestedEmail },
+    include: { role: true, modulePermissions: true },
+  });
   if (!user || !user.passwordHash) return NextResponse.json({ error: 'Invalid credentials.' }, { status: 401 });
 
   const valid = await bcrypt.compare(password, user.passwordHash);

@@ -2,6 +2,12 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcryptjs';
 
+const validAccessLevels = new Set(['MASTER_ADMIN', 'ADMIN', 'IT_SECURITY_OFFICER', 'IT_USER']);
+const normalizeAccessLevel = (value: unknown) => {
+  const level = typeof value === 'string' ? value.trim() : '';
+  return validAccessLevels.has(level) ? level : 'IT_USER';
+};
+
 // GET returns full user directory with module permissions.
 export async function GET() {
   const users = await prisma.user.findMany({ orderBy: { fullName: 'asc' }, include: { role: true, modulePermissions: true } });
@@ -28,10 +34,11 @@ export async function POST(request: Request) {
   const body = await request.json();
   if (!body.name || !body.email) return NextResponse.json({ error: 'name and email are required.' }, { status: 400 });
   const roleName = String(body.role || 'IT User');
+  const accessLevel = normalizeAccessLevel(body.accessLevel || 'IT_USER');
   let role = await prisma.role.findUnique({ where: { name: roleName } });
-  if (!role) role = await prisma.role.create({ data: { name: roleName, description: '', canViewConfidential: body.accessLevel !== 'IT_USER' } });
+  if (!role) role = await prisma.role.create({ data: { name: roleName, description: '', canViewConfidential: accessLevel !== 'IT_USER' } });
   const passwordHash = body.password ? await bcrypt.hash(String(body.password), 10) : null;
-  const user = await prisma.user.create({ data: { fullName: body.name, email: String(body.email).toLowerCase(), department: body.department || '', roleId: role.id, accessLevel: body.accessLevel || 'IT_USER', birthday: body.birthday ? new Date(body.birthday) : null, contactNumber: body.contactNumber || null, address: body.address || null, photoUrl: body.photoUrl || null, mfaEnabled: Boolean(body.mfaEnabled), passwordHash } });
+  const user = await prisma.user.create({ data: { fullName: body.name, email: String(body.email).toLowerCase(), department: body.department || '', roleId: role.id, accessLevel, birthday: body.birthday ? new Date(body.birthday) : null, contactNumber: body.contactNumber || null, address: body.address || null, photoUrl: body.photoUrl || null, mfaEnabled: Boolean(body.mfaEnabled), passwordHash } });
   return NextResponse.json({ id: user.id }, { status: 201 });
 }
 
@@ -54,7 +61,7 @@ export async function PATCH(request: Request) {
   let passwordHash: string | null | undefined;
   if (body.password) passwordHash = await bcrypt.hash(String(body.password), 10);
   else if (body.passwordConfigured === false) passwordHash = null;
-  const updated = await prisma.user.update({ where: { id: user.id }, data: { fullName: body.name ?? user.fullName, department: body.department ?? user.department, accessLevel: body.accessLevel ?? user.accessLevel, birthday: body.birthday ? new Date(body.birthday) : user.birthday, contactNumber: body.contactNumber ?? user.contactNumber, address: body.address ?? user.address, photoUrl: body.photoUrl ?? user.photoUrl, mfaEnabled: body.mfaEnabled ?? user.mfaEnabled, roleId, passwordHash } });
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { fullName: body.name ?? user.fullName, department: body.department ?? user.department, accessLevel: normalizeAccessLevel(body.accessLevel ?? user.accessLevel), birthday: body.birthday ? new Date(body.birthday) : user.birthday, contactNumber: body.contactNumber ?? user.contactNumber, address: body.address ?? user.address, photoUrl: body.photoUrl ?? user.photoUrl, mfaEnabled: body.mfaEnabled ?? user.mfaEnabled, roleId, passwordHash } });
   return NextResponse.json({ id: updated.id });
 }
 
