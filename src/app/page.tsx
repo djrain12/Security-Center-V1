@@ -74,7 +74,7 @@ export default function Dashboard() {
   const showSecurityOverview = active === 'Dashboard';
   const showExportReport = active === 'Dashboard';
 
-  const [theme, setTheme] = useState('dark');
+  const [theme, setTheme] = useState('light');
   const [branding, setBranding] = useState<{ name: string; tagline: string; logo: string }>({ name: 'WeSupport, Incorporated', tagline: 'WSI MIS', logo: '' });
 
   useEffect(() => {
