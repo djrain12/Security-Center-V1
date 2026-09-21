@@ -1,9 +1,10 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
 import { FormEvent, startTransition, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { Bell, ChevronDown, Copy, Download, Eye, EyeOff, FileText, Laptop, Mail, Menu, Monitor, Pencil, Plus, RefreshCw, Scan, Search, Server, ShieldCheck, Smartphone, Trash2, Upload, Video, X } from 'lucide-react';
+import { Bell, ChevronDown, Copy, Download, Eye, EyeOff, FileText, Laptop, LoaderCircle, Mail, Menu, Monitor, Pencil, Plus, RefreshCw, Scan, Search, Server, ShieldCheck, Smartphone, Trash2, Upload, Video, X } from 'lucide-react';
 
 const nav = ['Security Dashboard', 'Security Incidents', 'Security Events', 'Vulnerability Management', 'VAPT Management', 'Risk Management', 'Security Assets', 'Access Management', 'Network Security', 'Server Security', 'Backup Security'];
 const governanceNav = ['Governance Dashboard', 'Document Library', 'Security Policies', 'Security Awareness', 'Audit & Findings', 'SOC 2 Compliance', 'ISO 27001 Compliance', 'DPA Compliance', 'Security Reports', 'Audit Logs'];
@@ -67,6 +68,8 @@ export default function Dashboard() {
   const [notice, setNotice] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [tabLoading, setTabLoading] = useState(false);
   const isDashboard = active === 'Security Dashboard';
   const showSecurityOverview = active === 'Dashboard';
   const showExportReport = active === 'Dashboard';
@@ -143,12 +146,18 @@ export default function Dashboard() {
     const chatTimer = setInterval(syncChat, 5000);
     window.addEventListener('chat-updated', syncChat);
     window.addEventListener('storage', syncChat);
-    return () => { window.removeEventListener('focus', syncPresence); window.removeEventListener('storage', syncPresence); window.removeEventListener('chat-updated', syncChat); window.removeEventListener('storage', syncChat); clearInterval(chatTimer); };
+    const readyTimer = window.setTimeout(() => setPageLoading(false), 650);
+    return () => { window.removeEventListener('focus', syncPresence); window.removeEventListener('storage', syncPresence); window.removeEventListener('chat-updated', syncChat); window.removeEventListener('storage', syncChat); clearInterval(chatTimer); window.clearTimeout(readyTimer); };
   }, []);
 
   function navigateTo(module: string) {
-    setActive(module);
-    localStorage.setItem('wsi-active-module', module);
+    if (module === active) return;
+    setTabLoading(true);
+    window.setTimeout(() => {
+      setActive(module);
+      localStorage.setItem('wsi-active-module', module);
+      setTabLoading(false);
+    }, 260);
   }
 
   function openNotifications() {
@@ -208,9 +217,11 @@ export default function Dashboard() {
           <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><div className="mb-2 text-[10px] font-bold uppercase tracking-[1.7px] text-[var(--teal)]">WSI SECURITY MANAGEMENT INFORMATION SYSTEM</div><h1 className="font-display text-3xl font-semibold tracking-tight">{isDashboard ? 'Security overview' : active}</h1><p className="mt-2 text-xs text-[var(--muted)]">{isDashboard ? 'Executive visibility across your security posture, operations, and compliance.' : `Operational workspace for ${active.toLowerCase()}.`}</p></div>{showExportReport && <div className="flex gap-2"><button onClick={() => notify('Report export queued.')} className="flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-[11px] text-[var(--ink)]"><Download size={14} /> Export report</button></div>}</div>
           {showSecurityOverview && <div className="mb-5 flex items-center justify-between rounded-lg border border-[var(--teal)] bg-[var(--muted-surface)] p-4"><div className="flex items-center gap-3"><span className="h-2 w-2 rounded-full bg-[var(--teal)] shadow-[0_0_0_4px_var(--muted-surface)]" /><div><strong className="block text-xs text-[var(--accent-ink)]">Security status: Normal</strong><span className="text-[10px] opacity-70">Last assessed 11 Sep 2026, 09:42 AM</span></div></div><div className="hidden gap-4 text-[10px] opacity-70 sm:flex">Monitoring <b>24/7</b><span className="border-l border-current" />Next review <b>18 Sep</b></div></div>}
           {showSecurityOverview && <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value, trend, color]) => <article key={label} className="panel relative overflow-hidden p-4"><div className="flex justify-between text-[11px] text-[#8ca2a4]"><span>{label}</span><span className={`rounded-md px-2 py-1 ${color === 'mint' ? 'bg-[var(--muted-surface)] text-[var(--teal)]' : color === 'amber' ? 'bg-[#493b26] text-[var(--amber)]' : 'bg-[#492b33] text-[var(--coral)]'}`}>◆</span></div><strong className="mt-3 block font-display text-3xl">{value}</strong><div className="mt-1 text-[10px] text-[var(--teal)]">{trend} <span className="text-[#617477]">vs last month</span></div><div className="mt-4 h-1 rounded bg-[#18353b]"><i className="block h-full w-4/5 rounded bg-[var(--teal)]" /></div></article>)}</div>}
-          {active === 'Dashboard' ? <WorkspaceDashboard notify={notify} onNavigate={navigateTo} onAddUser={() => navigateTo('User Management')} onUploadDocument={() => navigateTo('Document Library')} onBuildReport={() => navigateTo('Reports')} /> : active === 'User Management' ?<UserManagement users={userRecords} notify={notify} currentUser={currentUserRecord} savedPermissions={savedPermissions} onSettingsPermission={(user, allowed) => { const nextPermissions = { ...savedPermissions, [user.name]: { ...(savedPermissions[user.name] || {}), Settings: allowed } }; setSavedPermissions(nextPermissions); api.patch('/api/users', { email: user.email, permissions: nextPermissions[user.name] }).catch(() => notify('Could not save permission to the database.')); notify(allowed ? `Settings access granted to ${user.name}.` : `Settings access revoked for ${user.name}.`); }} onEditProfile={setProfileUser} onReviewAccess={setAccessUser} onAddUser={newUser => { const nextUsers = [newUser, ...userRecords]; setUserRecords(nextUsers); api.post('/api/users', newUser).catch(() => notify('Could not save user to the database.')); notify(`${newUser.name} was successfully invited and added.`); }} onDeleteUser={user => { const nextUsers = userRecords.filter(record => record.name !== user.name); setUserRecords(nextUsers); api.del('/api/users', { email: user.email }).catch(() => notify('Could not delete user from the database.')); setProfileUser(null); notify(`${user.name}'s account was deleted.`); }} /> : active === 'Company Management' ? <CompanyManagement notify={notify} /> : active === 'Server Management' ? <ServerManagementWithLogs notify={notify} /> : active === 'Network Management' ? <NetworkManagementWithTabs notify={notify} /> : active === 'MIS Dashboard' ? <MisDashboard notify={notify} onNavigate={navigateTo} /> : active === 'Daily Report' ? <DailyReport notify={notify} /> : active === 'Inventory' ? <InventoryManagement notify={notify} /> : active === 'Email Management' ? <EmailManagement notify={notify} /> : active === 'Reports' ? <ReportsManagement notify={notify} /> : active === 'Document Library' ? <DocumentLibrary notify={notify} /> : active === 'Governance Dashboard' ? <GovernanceDashboard notify={notify} onNavigate={navigateTo} /> : active === 'VAPT Management' ? <VaptManagement notify={notify} /> : active === 'Security Incidents' ? <SecurityIncidents incidents={incidents} notify={notify} onUpdate={saveIncidents} onLogIncident={() => setModal(true)} /> : active === 'Backup Management' ? <BackupManagement notify={notify} /> : !isDashboard && !['Dashboard', 'User Management', 'Company Management', 'Server Management', 'Network Management'].includes(active) ? <ModuleContent module={active} notify={notify} /> : !isDashboard ? <div className="panel flex min-h-[360px] flex-col items-center justify-center text-center"><ShieldCheck size={42} className="mb-4 text-[var(--teal)]" /><h2 className="font-display text-xl">{active}</h2><p className="mt-2 max-w-md text-xs text-[var(--muted)]">This Phase 1 workspace is ready for live Prisma records and role-scoped operations.</p></div> : <DashboardPanels onNavigate={navigateTo} activity={activity} />}
+          <div key={active} className="workspace-content-enter">{active === 'Dashboard' ? <WorkspaceDashboard notify={notify} onNavigate={navigateTo} onAddUser={() => navigateTo('User Management')} onUploadDocument={() => navigateTo('Document Library')} onBuildReport={() => navigateTo('Reports')} /> : active === 'User Management' ?<UserManagement users={userRecords} currentUser={currentUserRecord} savedPermissions={savedPermissions} onSettingsPermission={(user, allowed) => { const nextPermissions = { ...savedPermissions, [user.name]: { ...(savedPermissions[user.name] || {}), Settings: allowed } }; setSavedPermissions(nextPermissions); api.patch('/api/users', { email: user.email, permissions: nextPermissions[user.name] }).catch(() => notify('Could not save permission to the database.')); notify(allowed ? `Settings access granted to ${user.name}.` : `Settings access revoked for ${user.name}.`); }} onEditProfile={setProfileUser} onReviewAccess={setAccessUser} onAddUser={newUser => { const nextUsers = [newUser, ...userRecords]; setUserRecords(nextUsers); api.post('/api/users', newUser).catch(() => notify('Could not save user to the database.')); notify(`${newUser.name} was successfully invited and added.`); }} onDeleteUser={user => { const nextUsers = userRecords.filter(record => record.name !== user.name); setUserRecords(nextUsers); api.del('/api/users', { email: user.email }).catch(() => notify('Could not delete user from the database.')); setProfileUser(null); notify(`${user.name}'s account was deleted.`); }} /> : active === 'Company Management' ? <CompanyManagement notify={notify} /> : active === 'Server Management' ? <ServerManagementWithLogs notify={notify} /> : active === 'Network Management' ? <NetworkManagementWithTabs notify={notify} /> : active === 'MIS Dashboard' ? <MisDashboard notify={notify} onNavigate={navigateTo} /> : active === 'Daily Report' ? <DailyReport notify={notify} /> : active === 'Inventory' ? <InventoryManagement notify={notify} /> : active === 'Email Management' ? <EmailManagement notify={notify} /> : active === 'Reports' ? <ReportsManagement notify={notify} /> : active === 'Document Library' ? <DocumentLibrary notify={notify} /> : active === 'Governance Dashboard' ? <GovernanceDashboard notify={notify} onNavigate={navigateTo} /> : active === 'VAPT Management' ? <VaptManagement notify={notify} /> : active === 'Security Incidents' ? <SecurityIncidents incidents={incidents} notify={notify} onUpdate={saveIncidents} onLogIncident={() => setModal(true)} /> : active === 'Backup Management' ? <BackupManagement notify={notify} /> : !isDashboard && !['Dashboard', 'User Management', 'Company Management', 'Server Management', 'Network Management'].includes(active) ? <ModuleContent module={active} notify={notify} /> : !isDashboard ? <div className="panel flex min-h-[360px] flex-col items-center justify-center text-center"><ShieldCheck size={42} className="mb-4 text-[var(--teal)]" /><h2 className="font-display text-xl">{active}</h2><p className="mt-2 max-w-md text-xs text-[var(--muted)]">This Phase 1 workspace is ready for live Prisma records and role-scoped operations.</p></div> : <DashboardPanels onNavigate={navigateTo} activity={activity} />}</div>
         </div>
       </section>
+
+      {(pageLoading || tabLoading) && <div className={`workspace-loading ${tabLoading ? 'workspace-loading-tab' : ''}`} role="status" aria-live="polite"><LoaderCircle size={28} className="animate-spin text-[var(--teal)]" /><span>{pageLoading ? 'Loading your security workspace…' : 'Opening workspace…'}</span></div>}
 
       {modal && <div className="fixed inset-0 z-30 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={submitIncident} className="w-full max-w-lg rounded-lg border border-[#2a555d] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><h2 className="font-display text-lg">Log security incident</h2><button type="button" onClick={() => setModal(false)}><X size={19} /></button></div><div className="grid gap-4"><label className="text-[11px] text-[#8ca2a4]">Incident title<input name="title" required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" placeholder="Describe the event" /></label><label className="text-[11px] text-[#8ca2a4]">Severity<select name="severity" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white"><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label><label className="text-[11px] text-[#8ca2a4]">Affected asset<input name="asset" required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" placeholder="Asset or service name" /></label></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setModal(false)} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Save incident</button></div></form></div>}
       {profileUser && <FullProfileModal user={profileUser} onClose={() => setProfileUser(null)} onSave={async updates => { try { await api.patch('/api/users', { email: profileUser.email, ...updates }); const nextUsers = userRecords.map(user => user.name === profileUser.name ? { ...user, ...updates } : user); setUserRecords(nextUsers); setProfileUser(null); notify(`${profileUser.name}'s profile was saved.`); } catch (cause) { notify(cause instanceof Error ? cause.message : 'Could not save profile to the database.'); } }} />}
@@ -243,7 +254,6 @@ export default function Dashboard() {
 
 function UserManagement({
   users: userList,
-  notify,
   currentUser,
   savedPermissions,
   onSettingsPermission,
@@ -253,7 +263,6 @@ function UserManagement({
   onAddUser
 }: {
   users: typeof users;
-  notify: (text: string) => void;
   currentUser: typeof users[number];
   savedPermissions: Record<string, Record<string, boolean>>;
   onSettingsPermission: (user: typeof users[number], allowed: boolean) => void;
@@ -311,7 +320,7 @@ function UserManagement({
           </div>
           <div className="divide-y divide-[#1b3a42] max-h-[460px] overflow-y-auto">
             {filteredUsers.length === 0 ? (
-              <div className="p-8 text-center text-xs text-[var(--muted)]">No users found matching "{search}".</div>
+              <div className="p-8 text-center text-xs text-[var(--muted)]">No users found matching &quot;{search}&quot;.</div>
             ) : (
               filteredUsers.map(user => (
                 <button
@@ -734,10 +743,12 @@ function InviteUserModal({ onClose, onSave }: { onClose: () => void; onSave: (ne
 }
 
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyProfileModal({ user, onClose, onSave }: { user: typeof users[number]; onClose: () => void; onSave: () => void }) {
   return <div className="fixed inset-0 z-30 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={event => { event.preventDefault(); onSave(); }} className="w-full max-w-lg rounded-lg border border-[#2a555d] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><span className="text-[10px] font-bold uppercase tracking-[1.3px] text-[var(--teal)]">Account settings</span><h2 className="mt-1 font-display text-lg">Edit profile</h2></div><button type="button" onClick={onClose}><X size={19} /></button></div><div className="grid gap-4"><label className="text-[11px] text-[#8ca2a4]">Full name<input defaultValue={user.name} required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" /></label><label className="text-[11px] text-[#8ca2a4]">Job title<input defaultValue={user.title} required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" /></label><label className="text-[11px] text-[#8ca2a4]">Department<select defaultValue={user.department} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white"><option>Cyber Security</option><option>MIS</option><option>Technical Department</option><option>Software Department</option></select></label><label className="text-[11px] text-[#8ca2a4]">Email address<input defaultValue={`${user.name.toLowerCase().replace(' ', '.')}@wsi.local`} type="email" required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" /></label></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Save changes</button></div></form></div>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyAccessReviewModal({ user, onClose, onApprove }: { user: typeof users[number]; onClose: () => void; onApprove: () => void }) {
   return <div className="fixed inset-0 z-30 grid place-items-center bg-[#031015cc] p-5"><div className="w-full max-w-lg rounded-lg border border-[#2a555d] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><span className="text-[10px] font-bold uppercase tracking-[1.3px] text-[var(--teal)]">Quarterly certification</span><h2 className="mt-1 font-display text-lg">Review access</h2><p className="mt-1 text-xs text-[#8ca2a4]">{user.name} · {user.role}</p></div><button onClick={onClose}><X size={19} /></button></div><div className="mb-5 rounded-md border border-[#195a55] bg-[#0b2928] p-3 text-xs"><strong className="block text-[#bff2e6]">Access scope</strong><span className="mt-1 block text-[10px] text-[#7fa4a2]">{user.scope}</span></div><div className="space-y-3 text-xs"><label className="flex items-center gap-3 rounded border border-[var(--line)] p-3"><input type="checkbox" defaultChecked className="accent-[#49d4bf]" /> View assigned security tasks</label><label className="flex items-center gap-3 rounded border border-[var(--line)] p-3"><input type="checkbox" defaultChecked={user.scope.includes('Confidential')} className="accent-[#49d4bf]" /> View confidential security records</label><label className="flex items-center gap-3 rounded border border-[var(--line)] p-3"><input type="checkbox" defaultChecked className="accent-[#49d4bf]" /> Submit audit evidence</label></div><div className="mt-6 flex justify-end gap-2"><button onClick={onClose} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button onClick={onApprove} className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Approve access</button></div></div></div>;
 }
@@ -972,6 +983,7 @@ function ZoneModal({ zone, onClose, onSave }: { zone: { id?: number; name: strin
 
 function DeviceNameModal({ device, onClose, onSave }: { device: DiscoveredDevice; onClose: () => void; onSave: (device: DiscoveredDevice, name: string) => void }) { return <div className="fixed inset-0 z-30 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={event => { event.preventDefault(); onSave(device, String(new FormData(event.currentTarget).get('name'))); }} className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--surface)] p-6"><div className="mb-5 flex items-center justify-between"><h2 className="font-display text-lg">Name device</h2><button type="button" onClick={onClose}><X size={19} /></button></div><p className="mb-4 text-xs text-[var(--muted)]">{device.ipAddress} · {device.deviceType || 'unknown device'}</p><input name="name" required defaultValue={device.name || ''} placeholder="Finance PC 01" className="w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Save name</button></div></form></div>; }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyEditableNetworkOperations({ notify }: { notify: (text: string) => void }) {
   const [zones, setZones] = useState<Array<{ id: number; name: string; cidr: string; gateway: string }>>([]);
   const [editing, setEditing] = useState<{ id?: number; name: string; cidr: string; gateway: string } | null>(null);
@@ -2506,6 +2518,7 @@ function MaintenanceLogs({ area, storageKey, notify }: { area: string; storageKe
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacySecurityIncidents({ notify }: { notify: (text: string) => void }) {
   const [incidents, setIncidents] = useState<Array<{ id: string; title: string; severity: string; status: string; reportedAt: string }>>([
     { id: 'INC-041', title: 'Suspicious authentication pattern on VPN', severity: 'High', status: 'Investigating', reportedAt: '2026-09-14' },
@@ -3435,6 +3448,7 @@ function ModuleContent({ module, notify }: { module: string; notify: (text: stri
 }
 
 type VaptResult = { target: string; type: string; detail: string; severity: string };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyVaptManagement({ notify }: { notify: (text: string) => void }) {
   const [scanType, setScanType] = useState<'ip' | 'port' | 'domain' | 'email'>('ip');
   const [target, setTarget] = useState('');
