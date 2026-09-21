@@ -23,14 +23,18 @@ npm.cmd run dev
 
 Open http://localhost:3000.
 
-### Default sign-in
+### Sign-in and platform administration
 
-Seeded accounts (change the password after first login):
+The seed command reads the platform-owner and demo-user credentials from environment variables. Keep these values in the live server secret manager or an untracked `.env` file; never commit them to source control.
 
-| Email | Password | Role |
-| --- | --- | --- |
-| admin@gmail.com | Admin@2026 | Master Admin |
-| user@gmail.com | Admin@2026 | IT Security Officer |
+```env
+PLATFORM_OWNER_EMAIL="replace-with-owner-email"
+PLATFORM_OWNER_PASSWORD="replace-with-a-long-random-password"
+DEMO_USER_EMAIL="replace-with-demo-user-email"
+DEMO_USER_PASSWORD="replace-with-a-long-random-password"
+```
+
+The Super Master Admin is the platform owner. Only this account can create companies, create company Master Admin accounts, and manage company subscriptions/access. A company Master Admin can manage users and permissions inside their assigned company, but cannot see or manage other companies.
 
 ## What's in the database
 
@@ -55,12 +59,24 @@ All operational data is stored in MySQL via Prisma:
 ```powershell
 npm.cmd install
 npx prisma migrate deploy   # create/upgrade tables
-npx tsx prisma/seed.ts      # optional: roles + default admin
+npx tsx prisma/seed.ts      # optional: roles + users from the server environment
 npm.cmd run build
 npm.cmd start               # or: next start -p 3000
 ```
 
 3. Use **Settings → Data & Backup** in the app to download a JSON backup or restore one on the new server.
+
+### Access protection
+
+The application now requires a server-issued, signed `HttpOnly` session cookie for the workspace and API routes. Browser storage is not treated as authentication. Configure a unique secret on every deployment:
+
+```env
+SESSION_SECRET="generate-a-long-random-value-and-keep-it-private"
+```
+
+Run the application behind HTTPS in production so session cookies are encrypted in transit. For local HTTP-only testing, set `SESSION_COOKIE_SECURE="false"`; do not use that setting on an internet-facing deployment. Keep the application behind a VPN or private network, restrict inbound firewall rules to your company’s administrator/VPN addresses, and never expose MySQL directly to the internet. The login endpoint also throttles repeated failures, but production deployments should add rate limiting at the reverse proxy or WAF.
+
+Master Admins can open **Company Management** from the workspace navigation to create a company, edit or delete it, assign users, and create company-specific login accounts. Each company user signs in through the same `/login` page with the email and password created for that account.
 
 ## pfSense integration
 
