@@ -1,16 +1,16 @@
+/* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { startTransition, useEffect, useRef, useState } from 'react';
+import { FormEvent, startTransition, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
-import { Bell, ChevronDown, Copy, Download, Eye, EyeOff, FileText, Globe, Laptop, Mail, Menu, Monitor, Pencil, Plus, RefreshCw, Scan, Search, Server, ShieldCheck, Smartphone, Trash2, Upload, Video, X } from 'lucide-react';
+import { Bell, ChevronDown, Copy, Download, Eye, EyeOff, FileText, Laptop, LoaderCircle, Mail, Menu, Monitor, Pencil, Plus, RefreshCw, Scan, Search, Server, ShieldCheck, Smartphone, Trash2, Upload, Video, X } from 'lucide-react';
 
 const nav = ['Security Dashboard', 'Security Incidents', 'Security Events', 'Vulnerability Management', 'VAPT Management', 'Risk Management', 'Security Assets', 'Access Management', 'Network Security', 'Server Security', 'Backup Security'];
 const governanceNav = ['Governance Dashboard', 'Document Library', 'Security Policies', 'Security Awareness', 'Audit & Findings', 'SOC 2 Compliance', 'ISO 27001 Compliance', 'DPA Compliance', 'Security Reports', 'Audit Logs'];
 const misToolsNav = ['MIS Dashboard', 'Daily Report', 'Inventory', 'Email Management', 'Reports'];
-const workspaceNav = ['Dashboard', 'User Management', 'Server Management', 'Network Management', 'Backup Management'];
+const workspaceNav = ['Dashboard', 'User Management', 'Company Management', 'Server Management', 'Network Management', 'Backup Management'];
 const allModules = [...new Set([...workspaceNav, ...nav, ...governanceNav, ...misToolsNav, 'Settings'])];
-type CustomModule = { id: string; title: string; description: string; apiKey: string; baseUrl: string };
 const metrics = [['Security incidents', '12', '+8.3%', 'coral'], ['Critical / high vulnerabilities', '07', '-12.5%', 'red'], ['Open risks', '24', '-4.1%', 'amber'], ['Security compliance', '94.8%', '+2.4%', 'mint']];
 const activity: Array<[string, number, string]> = [['VAPT engagements', 78, 'mint'], ['Patching cadence', 92, 'blue'], ['Access reviews', 64, 'amber'], ['Backup verification', 100, 'violet']];
 const users = [
@@ -51,8 +51,10 @@ export default function Dashboard() {
   const [profileUser, setProfileUser] = useState<typeof users[number] | null>(null);
   const [accessUser, setAccessUser] = useState<typeof users[number] | null>(null);
   const [savedPermissions, setSavedPermissions] = useState<Record<string, Record<string, boolean>>>({});
-  const currentUserRecord = userRecords[0];
-  const canAccessSettings = currentUserRecord?.accessLevel === 'MASTER_ADMIN' || savedPermissions[currentUserRecord?.name || '']?.['Settings'] === true;
+  const [loggedInEmail] = useState(() => typeof window === 'undefined' ? '' : sessionStorage.getItem('wsi-login-email')?.toLowerCase() || '');
+  const currentUserRecord = userRecords.find(user => user.email.toLowerCase() === loggedInEmail) || userRecords[0];
+  const isSuperMasterAdmin = currentUserRecord?.accessLevel === 'SUPER_MASTER_ADMIN';
+  const canAccessSettings = isSuperMasterAdmin || currentUserRecord?.accessLevel === 'MASTER_ADMIN' || savedPermissions[currentUserRecord?.name || '']?.['Settings'] === true;
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -66,14 +68,14 @@ export default function Dashboard() {
   const [notice, setNotice] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
+  const [pageLoading, setPageLoading] = useState(true);
+  const [tabLoading, setTabLoading] = useState(false);
   const isDashboard = active === 'Security Dashboard';
   const showSecurityOverview = active === 'Dashboard';
   const showExportReport = active === 'Dashboard';
 
   const [theme, setTheme] = useState('dark');
   const [branding, setBranding] = useState<{ name: string; tagline: string; logo: string }>({ name: 'WeSupport, Incorporated', tagline: 'WSI MIS', logo: '' });
-  const [customModules, setCustomModules] = useState<CustomModule[]>([]);
-  const [connectedOpen, setConnectedOpen] = useState(true);
 
   useEffect(() => {
     const storedUsers = localStorage.getItem('wsi-user-records');
@@ -84,9 +86,6 @@ export default function Dashboard() {
         if (stored['system-settings']) {
           const parsed = JSON.parse(stored['system-settings']) as Partial<SystemSettings>;
           setBranding({ name: parsed.orgName || 'WeSupport, Incorporated', tagline: parsed.department || 'WSI MIS', logo: parsed.companyLogo || '' });
-        }
-        if (stored['custom-modules']) {
-          try { setCustomModules(JSON.parse(stored['custom-modules']) as CustomModule[]); } catch { /* ignore */ }
         }
       } catch { /* ignore */ }
     })();
@@ -147,12 +146,18 @@ export default function Dashboard() {
     const chatTimer = setInterval(syncChat, 5000);
     window.addEventListener('chat-updated', syncChat);
     window.addEventListener('storage', syncChat);
-    return () => { window.removeEventListener('focus', syncPresence); window.removeEventListener('storage', syncPresence); window.removeEventListener('chat-updated', syncChat); window.removeEventListener('storage', syncChat); clearInterval(chatTimer); };
+    const readyTimer = window.setTimeout(() => setPageLoading(false), 650);
+    return () => { window.removeEventListener('focus', syncPresence); window.removeEventListener('storage', syncPresence); window.removeEventListener('chat-updated', syncChat); window.removeEventListener('storage', syncChat); clearInterval(chatTimer); window.clearTimeout(readyTimer); };
   }, []);
 
   function navigateTo(module: string) {
-    setActive(module);
-    localStorage.setItem('wsi-active-module', module);
+    if (module === active) return;
+    setTabLoading(true);
+    window.setTimeout(() => {
+      setActive(module);
+      localStorage.setItem('wsi-active-module', module);
+      setTabLoading(false);
+    }, 260);
   }
 
   function openNotifications() {
@@ -191,19 +196,13 @@ export default function Dashboard() {
           <div><strong className="font-display text-sm">{branding.name.split(',')[0]}</strong><span className="block text-[10px] text-[#617477]">{branding.tagline}</span></div>
         </div>
         <div className="workspace-label mb-2 px-3 text-[10px] font-bold uppercase tracking-[1.4px] text-white">Workspace</div>
-        {['Dashboard', 'User Management', 'Server Management', 'Network Management', 'Backup Management'].map(item => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="workspace-menu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs transition">◈ {item}</button>)}
+        {workspaceNav.filter(item => item !== 'Company Management' || isSuperMasterAdmin).map(item => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="workspace-menu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-xs transition">◈ {item}</button>)}
         <button type="button" onClick={() => setCyberSecurityOpen(open => !open)} aria-expanded={cyberSecurityOpen} className="mb-2 mt-5 flex w-full items-center justify-between px-3 text-left text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]"><span>◈ Cyber Security <span className="ml-1 inline-block h-1 w-1 rounded-full bg-[var(--teal)]" /></span><ChevronDown size={13} className={`transition-transform ${cyberSecurityOpen ? '' : '-rotate-90'}`} /></button>
         {cyberSecurityOpen && nav.map((item, index) => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="sidebar-submenu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] transition"><span className="w-3 text-center">{index === 0 ? '⌂' : index === 1 ? '!' : '◇'}</span>{item}{item === 'Security Incidents' && incidents.filter(incident => incident.status !== 'Resolved').length > 0 && <b className="notification-count ml-auto rounded-full px-1.5 py-0.5 text-[9px]">{incidents.filter(incident => incident.status !== 'Resolved').length}</b>}</button>)}
         <button type="button" onClick={() => setItGovernanceOpen(open => !open)} aria-expanded={itGovernanceOpen} className="mb-2 mt-4 flex w-full items-center justify-between border-t border-[var(--line)] px-3 pt-4 text-left text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]"><span>▤ IT Governance</span><ChevronDown size={13} className={`transition-transform ${itGovernanceOpen ? '' : '-rotate-90'}`} /></button>
         {itGovernanceOpen && governanceNav.map((item, index) => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="sidebar-submenu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] transition"><span className="w-3 text-center">{index === 0 ? '⌂' : index === 1 ? '▤' : index < 5 ? '≡' : '✓'}</span>{item}</button>)}
         <button type="button" onClick={() => setMisToolsOpen(open => !open)} aria-expanded={misToolsOpen} className="mb-2 mt-4 flex w-full items-center justify-between border-t border-[var(--line)] px-3 pt-4 text-left text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]"><span>▣ MIS Tools</span><ChevronDown size={13} className={`transition-transform ${misToolsOpen ? '' : '-rotate-90'}`} /></button>
         {misToolsOpen && misToolsNav.map(item => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="sidebar-submenu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] transition"><span className="w-3 text-center">{item === 'MIS Dashboard' ? '⌂' : item === 'Daily Report' ? '✎' : item === 'Inventory' ? '▦' : item === 'Email Management' ? '✉' : '▤'}</span>{item}</button>)}
-        {customModules.length > 0 && (
-          <>
-            <button type="button" onClick={() => setConnectedOpen(open => !open)} aria-expanded={connectedOpen} className="mb-2 mt-4 flex w-full items-center justify-between border-t border-[var(--line)] px-3 pt-4 text-left text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]"><span>◎ Connected systems</span><ChevronDown size={13} className={`transition-transform ${connectedOpen ? '' : '-rotate-90'}`} /></button>
-            {connectedOpen && customModules.map(module => <button key={module.id} data-active={active === module.title ? 'true' : 'false'} onClick={() => { navigateTo(module.title); setMobileOpen(false); }} className="sidebar-submenu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] transition"><span className="w-3 text-center">◎</span>{module.title}</button>)}
-          </>
-        )}
         <div className="sidebar-bottom">{canAccessSettings && <button type="button" onClick={() => setSettingsOpen(true)} className="sidebar-settings flex items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] text-white transition hover:bg-white/20"><span className="w-3 text-center">⚙</span>Settings</button>}<div className="sidebar-footer border-t border-[var(--line)] pt-4 text-[10px] text-[#617477]"><strong className="block text-[#b6c7c7]">Cyber Security Department</strong>Protected workspace</div></div>
       </aside>
 
@@ -211,22 +210,24 @@ export default function Dashboard() {
           <header className="flex h-[72px] items-center justify-between border-b border-[var(--line)] px-5 lg:px-10">
           <button className="lg:hidden" onClick={() => setMobileOpen(!mobileOpen)}><Menu size={20} /></button>
           <div className="hidden text-xs text-[var(--muted)] sm:block">WSI MIS Tools <span className="px-2 opacity-60">/</span><span className="text-[var(--ink)]">{active}</span></div>
-          <div className="flex items-center gap-4"><button onClick={() => { setSearchTerm(''); setSearchOpen(true); }} aria-label="Search workspace" className="text-[var(--muted)]"><Search size={19} /></button><button onClick={openNotifications} aria-label="Open notifications" className="relative text-[var(--muted)]"><Bell size={18} />{notifications.some(notification => notification.unread) && <i className="absolute -right-1 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-[var(--coral)] px-1 text-[8px] font-bold text-white">{notifications.filter(notification => notification.unread).length}</i>}</button><button onClick={() => setProfileMenuOpen(true)} className="hidden items-center gap-2 border-l border-[var(--line)] pl-4 text-left sm:flex"><UserAvatar user={userRecords[0]} sizeClass="h-8 w-8" textClass="text-[10px]" /><div><strong className="block text-xs">{userRecords[0].name}</strong><span className="text-[10px] text-[var(--muted)]">{userRecords[0].title}</span></div><ChevronDown size={13} className="text-[var(--muted)]" /></button></div>
+          <div className="flex items-center gap-4"><button onClick={() => { setSearchTerm(''); setSearchOpen(true); }} aria-label="Search workspace" className="text-[var(--muted)]"><Search size={19} /></button><button onClick={openNotifications} aria-label="Open notifications" className="relative text-[var(--muted)]"><Bell size={18} />{notifications.some(notification => notification.unread) && <i className="absolute -right-1 -top-1 grid h-3.5 min-w-3.5 place-items-center rounded-full bg-[var(--coral)] px-1 text-[8px] font-bold text-white">{notifications.filter(notification => notification.unread).length}</i>}</button>          <button onClick={() => setProfileMenuOpen(true)} className="hidden items-center gap-2 border-l border-[var(--line)] pl-4 text-left sm:flex"><UserAvatar user={currentUserRecord} sizeClass="h-8 w-8" textClass="text-[10px]" /><div><strong className="block text-xs">{currentUserRecord.name}</strong><span className="text-[10px] text-[var(--muted)]">{currentUserRecord.title}</span></div><ChevronDown size={13} className="text-[var(--muted)]" /></button></div>
         </header>
 
         <div className="mx-auto max-w-[1500px] p-5 lg:p-10">
           <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><div className="mb-2 text-[10px] font-bold uppercase tracking-[1.7px] text-[var(--teal)]">WSI SECURITY MANAGEMENT INFORMATION SYSTEM</div><h1 className="font-display text-3xl font-semibold tracking-tight">{isDashboard ? 'Security overview' : active}</h1><p className="mt-2 text-xs text-[var(--muted)]">{isDashboard ? 'Executive visibility across your security posture, operations, and compliance.' : `Operational workspace for ${active.toLowerCase()}.`}</p></div>{showExportReport && <div className="flex gap-2"><button onClick={() => notify('Report export queued.')} className="flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-[11px] text-[var(--ink)]"><Download size={14} /> Export report</button></div>}</div>
           {showSecurityOverview && <div className="mb-5 flex items-center justify-between rounded-lg border border-[var(--teal)] bg-[var(--muted-surface)] p-4"><div className="flex items-center gap-3"><span className="h-2 w-2 rounded-full bg-[var(--teal)] shadow-[0_0_0_4px_var(--muted-surface)]" /><div><strong className="block text-xs text-[var(--accent-ink)]">Security status: Normal</strong><span className="text-[10px] opacity-70">Last assessed 11 Sep 2026, 09:42 AM</span></div></div><div className="hidden gap-4 text-[10px] opacity-70 sm:flex">Monitoring <b>24/7</b><span className="border-l border-current" />Next review <b>18 Sep</b></div></div>}
           {showSecurityOverview && <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value, trend, color]) => <article key={label} className="panel relative overflow-hidden p-4"><div className="flex justify-between text-[11px] text-[#8ca2a4]"><span>{label}</span><span className={`rounded-md px-2 py-1 ${color === 'mint' ? 'bg-[var(--muted-surface)] text-[var(--teal)]' : color === 'amber' ? 'bg-[#493b26] text-[var(--amber)]' : 'bg-[#492b33] text-[var(--coral)]'}`}>◆</span></div><strong className="mt-3 block font-display text-3xl">{value}</strong><div className="mt-1 text-[10px] text-[var(--teal)]">{trend} <span className="text-[#617477]">vs last month</span></div><div className="mt-4 h-1 rounded bg-[#18353b]"><i className="block h-full w-4/5 rounded bg-[var(--teal)]" /></div></article>)}</div>}
-          {active === 'Dashboard' ? <WorkspaceDashboard notify={notify} onNavigate={navigateTo} onAddUser={() => navigateTo('User Management')} onUploadDocument={() => navigateTo('Document Library')} /> : customModules.some(module => module.title === active) ? <ConnectedModuleView module={customModules.find(module => module.title === active)!} notify={notify} /> : active === 'User Management' ?<UserManagement users={userRecords} notify={notify} currentUser={currentUserRecord} savedPermissions={savedPermissions} onSettingsPermission={(user, allowed) => { const nextPermissions = { ...savedPermissions, [user.name]: { ...(savedPermissions[user.name] || {}), Settings: allowed } }; setSavedPermissions(nextPermissions); api.patch('/api/users', { email: user.email, permissions: nextPermissions[user.name] }).catch(() => notify('Could not save permission to the database.')); notify(allowed ? `Settings access granted to ${user.name}.` : `Settings access revoked for ${user.name}.`); }} onEditProfile={setProfileUser} onReviewAccess={setAccessUser} onAddUser={newUser => { const nextUsers = [newUser, ...userRecords]; setUserRecords(nextUsers); api.post('/api/users', newUser).catch(() => notify('Could not save user to the database.')); notify(`${newUser.name} was successfully invited and added.`); }} onDeleteUser={user => { const nextUsers = userRecords.filter(record => record.name !== user.name); setUserRecords(nextUsers); api.del('/api/users', { email: user.email }).catch(() => notify('Could not delete user from the database.')); setProfileUser(null); notify(`${user.name}'s account was deleted.`); }} /> : active === 'Server Management' ? <ServerManagementWithLogs notify={notify} /> : active === 'Network Management' ? <NetworkManagementWithTabs notify={notify} /> : active === 'MIS Dashboard' ? <MisDashboard notify={notify} onNavigate={navigateTo} /> : active === 'Daily Report' ? <DailyReport notify={notify} /> : active === 'Inventory' ? <InventoryManagement notify={notify} /> : active === 'Email Management' ? <EmailManagement notify={notify} /> : active === 'Reports' ? <ReportsManagement notify={notify} /> : active === 'Document Library' ? <DocumentLibrary notify={notify} /> : active === 'Governance Dashboard' ? <GovernanceDashboard notify={notify} onNavigate={navigateTo} /> : active === 'VAPT Management' ? <VaptManagement notify={notify} /> : active === 'Security Incidents' ? <SecurityIncidents incidents={incidents} notify={notify} onUpdate={saveIncidents} onLogIncident={() => setModal(true)} /> : active === 'Backup Management' ? <BackupManagement notify={notify} /> : !isDashboard && !['Dashboard', 'User Management', 'Server Management', 'Network Management'].includes(active) ? <ModuleContent module={active} notify={notify} /> : !isDashboard ? <div className="panel flex min-h-[360px] flex-col items-center justify-center text-center"><ShieldCheck size={42} className="mb-4 text-[var(--teal)]" /><h2 className="font-display text-xl">{active}</h2><p className="mt-2 max-w-md text-xs text-[var(--muted)]">This Phase 1 workspace is ready for live Prisma records and role-scoped operations.</p></div> : <DashboardPanels onNavigate={navigateTo} activity={activity} />}
+          <div key={active} className="workspace-content-enter">{active === 'Dashboard' ? <WorkspaceDashboard notify={notify} onNavigate={navigateTo} onAddUser={() => navigateTo('User Management')} onUploadDocument={() => navigateTo('Document Library')} onBuildReport={() => navigateTo('Reports')} /> : active === 'User Management' ?<UserManagement users={userRecords} currentUser={currentUserRecord} savedPermissions={savedPermissions} onSettingsPermission={(user, allowed) => { const nextPermissions = { ...savedPermissions, [user.name]: { ...(savedPermissions[user.name] || {}), Settings: allowed } }; setSavedPermissions(nextPermissions); api.patch('/api/users', { email: user.email, permissions: nextPermissions[user.name] }).catch(() => notify('Could not save permission to the database.')); notify(allowed ? `Settings access granted to ${user.name}.` : `Settings access revoked for ${user.name}.`); }} onEditProfile={setProfileUser} onReviewAccess={setAccessUser} onAddUser={newUser => { const nextUsers = [newUser, ...userRecords]; setUserRecords(nextUsers); api.post('/api/users', newUser).catch(() => notify('Could not save user to the database.')); notify(`${newUser.name} was successfully invited and added.`); }} onDeleteUser={user => { const nextUsers = userRecords.filter(record => record.name !== user.name); setUserRecords(nextUsers); api.del('/api/users', { email: user.email }).catch(() => notify('Could not delete user from the database.')); setProfileUser(null); notify(`${user.name}'s account was deleted.`); }} /> : active === 'Company Management' ? <CompanyManagement notify={notify} /> : active === 'Server Management' ? <ServerManagementWithLogs notify={notify} /> : active === 'Network Management' ? <NetworkManagementWithTabs notify={notify} /> : active === 'MIS Dashboard' ? <MisDashboard notify={notify} onNavigate={navigateTo} /> : active === 'Daily Report' ? <DailyReport notify={notify} /> : active === 'Inventory' ? <InventoryManagement notify={notify} /> : active === 'Email Management' ? <EmailManagement notify={notify} /> : active === 'Reports' ? <ReportsManagement notify={notify} /> : active === 'Document Library' ? <DocumentLibrary notify={notify} /> : active === 'Governance Dashboard' ? <GovernanceDashboard notify={notify} onNavigate={navigateTo} /> : active === 'VAPT Management' ? <VaptManagement notify={notify} /> : active === 'Security Incidents' ? <SecurityIncidents incidents={incidents} notify={notify} onUpdate={saveIncidents} onLogIncident={() => setModal(true)} /> : active === 'Backup Management' ? <BackupManagement notify={notify} /> : !isDashboard && !['Dashboard', 'User Management', 'Company Management', 'Server Management', 'Network Management'].includes(active) ? <ModuleContent module={active} notify={notify} /> : !isDashboard ? <div className="panel flex min-h-[360px] flex-col items-center justify-center text-center"><ShieldCheck size={42} className="mb-4 text-[var(--teal)]" /><h2 className="font-display text-xl">{active}</h2><p className="mt-2 max-w-md text-xs text-[var(--muted)]">This Phase 1 workspace is ready for live Prisma records and role-scoped operations.</p></div> : <DashboardPanels onNavigate={navigateTo} activity={activity} />}</div>
         </div>
       </section>
 
+      {(pageLoading || tabLoading) && <div className={`workspace-loading ${tabLoading ? 'workspace-loading-tab' : ''}`} role="status" aria-live="polite"><LoaderCircle size={28} className="animate-spin text-[var(--teal)]" /><span>{pageLoading ? 'Loading your security workspace…' : 'Opening workspace…'}</span></div>}
+
       {modal && <div className="fixed inset-0 z-30 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={submitIncident} className="w-full max-w-lg rounded-lg border border-[#2a555d] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><h2 className="font-display text-lg">Log security incident</h2><button type="button" onClick={() => setModal(false)}><X size={19} /></button></div><div className="grid gap-4"><label className="text-[11px] text-[#8ca2a4]">Incident title<input name="title" required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" placeholder="Describe the event" /></label><label className="text-[11px] text-[#8ca2a4]">Severity<select name="severity" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white"><option>Critical</option><option>High</option><option>Medium</option><option>Low</option></select></label><label className="text-[11px] text-[#8ca2a4]">Affected asset<input name="asset" required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" placeholder="Asset or service name" /></label></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setModal(false)} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Save incident</button></div></form></div>}
-      {profileUser && <FullProfileModal user={profileUser} onClose={() => setProfileUser(null)} onSave={updates => { const nextUsers = userRecords.map(user => user.name === profileUser.name ? { ...user, ...updates } : user); setUserRecords(nextUsers); api.patch('/api/users', { email: profileUser.email, ...updates }).catch(() => notify('Could not save profile to the database.')); setProfileUser(null); notify(`${profileUser.name}'s profile was saved.`); }} />}
+      {profileUser && <FullProfileModal user={profileUser} onClose={() => setProfileUser(null)} onSave={async updates => { try { await api.patch('/api/users', { email: profileUser.email, ...updates }); const nextUsers = userRecords.map(user => user.name === profileUser.name ? { ...user, ...updates } : user); setUserRecords(nextUsers); setProfileUser(null); notify(`${profileUser.name}'s profile was saved.`); } catch (cause) { notify(cause instanceof Error ? cause.message : 'Could not save profile to the database.'); } }} />}
       {accessUser && <EditableAccessReviewModal user={accessUser} initialPermissions={savedPermissions[accessUser.name]} onClose={() => setAccessUser(null)} onApprove={permissions => { const nextPermissions = { ...savedPermissions, [accessUser.name]: permissions }; setSavedPermissions(nextPermissions); api.patch('/api/users', { email: accessUser.email, permissions }).catch(() => notify('Could not save permissions to the database.')); setAccessUser(null); notify(`Access permissions saved for ${accessUser.name}.`); }} />}
-      {profileMenuOpen && <ProfileDrawer user={userRecords[0]} onEdit={() => { setProfileMenuOpen(false); setProfileUser(userRecords[0]); }} onLogout={() => { const email = sessionStorage.getItem('wsi-login-email'); const onlineEmails = JSON.parse(localStorage.getItem('wsi-online-users') || '[]') as string[]; localStorage.setItem('wsi-online-users', JSON.stringify(onlineEmails.filter(item => item !== email))); sessionStorage.removeItem('wsi-login-email'); sessionStorage.removeItem('wsi-authenticated'); router.push('/login'); }} onClose={() => setProfileMenuOpen(false)} />}
-      {settingsOpen && <SystemSettingsModal theme={theme} onThemeChange={value => { setTheme(value); localStorage.setItem('wsi-theme', value); }} customModules={customModules} onCustomModulesChange={setCustomModules} notify={notify} onClose={() => setSettingsOpen(false)} />}
+      {profileMenuOpen && <ProfileDrawer user={userRecords[0]} onEdit={() => { setProfileMenuOpen(false); setProfileUser(userRecords[0]); }} onLogout={async () => { const email = sessionStorage.getItem('wsi-login-email'); const onlineEmails = JSON.parse(localStorage.getItem('wsi-online-users') || '[]') as string[]; localStorage.setItem('wsi-online-users', JSON.stringify(onlineEmails.filter(item => item !== email))); await fetch('/api/auth/logout', { method: 'POST' }); sessionStorage.removeItem('wsi-login-email'); sessionStorage.removeItem('wsi-authenticated'); sessionStorage.removeItem('wsi-current-user'); router.push('/login'); }} onClose={() => setProfileMenuOpen(false)} />}
+      {settingsOpen && <SystemSettingsModal theme={theme} onThemeChange={value => { setTheme(value); localStorage.setItem('wsi-theme', value); }} notify={notify} onClose={() => setSettingsOpen(false)} />}
       {notificationsOpen && <NotificationsDrawer notifications={notifications} onNavigate={module => { setNotificationsOpen(false); navigateTo(module); }} onMarkAllRead={() => setNotifications(current => current.map(notification => ({ ...notification, unread: false })))} onClose={() => setNotificationsOpen(false)} />}
       {searchOpen && <SearchOverlay term={searchTerm} setTerm={setSearchTerm} users={userRecords} onNavigate={module => { setSearchOpen(false); navigateTo(module); }} onClose={() => setSearchOpen(false)} />}
       {notice && <div className="fixed bottom-5 right-5 z-40 rounded border border-[var(--teal)] bg-[var(--muted-surface)] px-4 py-3 text-xs text-[var(--accent-ink)]">{notice}</div>}
@@ -253,7 +254,6 @@ export default function Dashboard() {
 
 function UserManagement({
   users: userList,
-  notify,
   currentUser,
   savedPermissions,
   onSettingsPermission,
@@ -263,7 +263,6 @@ function UserManagement({
   onAddUser
 }: {
   users: typeof users;
-  notify: (text: string) => void;
   currentUser: typeof users[number];
   savedPermissions: Record<string, Record<string, boolean>>;
   onSettingsPermission: (user: typeof users[number], allowed: boolean) => void;
@@ -321,7 +320,7 @@ function UserManagement({
           </div>
           <div className="divide-y divide-[#1b3a42] max-h-[460px] overflow-y-auto">
             {filteredUsers.length === 0 ? (
-              <div className="p-8 text-center text-xs text-[var(--muted)]">No users found matching "{search}".</div>
+              <div className="p-8 text-center text-xs text-[var(--muted)]">No users found matching &quot;{search}&quot;.</div>
             ) : (
               filteredUsers.map(user => (
                 <button
@@ -405,7 +404,7 @@ function UserManagement({
             <button onClick={() => onReviewAccess(selected)} className="review-access-button rounded-md px-3 py-2 text-[11px]">
               Review access
             </button>
-            {currentUser?.accessLevel === 'MASTER_ADMIN' && selected.accessLevel !== 'MASTER_ADMIN' && (
+            {(currentUser?.accessLevel === 'SUPER_MASTER_ADMIN' || currentUser?.accessLevel === 'MASTER_ADMIN') && selected.accessLevel !== 'SUPER_MASTER_ADMIN' && (
               <button
                 onClick={() => onSettingsPermission(selected, !(savedPermissions[selected.name]?.['Settings'] === true))}
                 className={`rounded-md border px-3 py-2 text-[11px] ${savedPermissions[selected.name]?.['Settings'] ? 'border-[var(--teal)] text-[var(--teal)]' : 'border-[var(--line)] text-[var(--ink)] hover:bg-white/5'}`}
@@ -744,18 +743,102 @@ function InviteUserModal({ onClose, onSave }: { onClose: () => void; onSave: (ne
 }
 
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyProfileModal({ user, onClose, onSave }: { user: typeof users[number]; onClose: () => void; onSave: () => void }) {
   return <div className="fixed inset-0 z-30 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={event => { event.preventDefault(); onSave(); }} className="w-full max-w-lg rounded-lg border border-[#2a555d] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><span className="text-[10px] font-bold uppercase tracking-[1.3px] text-[var(--teal)]">Account settings</span><h2 className="mt-1 font-display text-lg">Edit profile</h2></div><button type="button" onClick={onClose}><X size={19} /></button></div><div className="grid gap-4"><label className="text-[11px] text-[#8ca2a4]">Full name<input defaultValue={user.name} required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" /></label><label className="text-[11px] text-[#8ca2a4]">Job title<input defaultValue={user.title} required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" /></label><label className="text-[11px] text-[#8ca2a4]">Department<select defaultValue={user.department} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white"><option>Cyber Security</option><option>MIS</option><option>Technical Department</option><option>Software Department</option></select></label><label className="text-[11px] text-[#8ca2a4]">Email address<input defaultValue={`${user.name.toLowerCase().replace(' ', '.')}@wsi.local`} type="email" required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white" /></label></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Save changes</button></div></form></div>;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyAccessReviewModal({ user, onClose, onApprove }: { user: typeof users[number]; onClose: () => void; onApprove: () => void }) {
   return <div className="fixed inset-0 z-30 grid place-items-center bg-[#031015cc] p-5"><div className="w-full max-w-lg rounded-lg border border-[#2a555d] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-start justify-between"><div><span className="text-[10px] font-bold uppercase tracking-[1.3px] text-[var(--teal)]">Quarterly certification</span><h2 className="mt-1 font-display text-lg">Review access</h2><p className="mt-1 text-xs text-[#8ca2a4]">{user.name} · {user.role}</p></div><button onClick={onClose}><X size={19} /></button></div><div className="mb-5 rounded-md border border-[#195a55] bg-[#0b2928] p-3 text-xs"><strong className="block text-[#bff2e6]">Access scope</strong><span className="mt-1 block text-[10px] text-[#7fa4a2]">{user.scope}</span></div><div className="space-y-3 text-xs"><label className="flex items-center gap-3 rounded border border-[var(--line)] p-3"><input type="checkbox" defaultChecked className="accent-[#49d4bf]" /> View assigned security tasks</label><label className="flex items-center gap-3 rounded border border-[var(--line)] p-3"><input type="checkbox" defaultChecked={user.scope.includes('Confidential')} className="accent-[#49d4bf]" /> View confidential security records</label><label className="flex items-center gap-3 rounded border border-[var(--line)] p-3"><input type="checkbox" defaultChecked className="accent-[#49d4bf]" /> Submit audit evidence</label></div><div className="mt-6 flex justify-end gap-2"><button onClick={onClose} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button onClick={onApprove} className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Approve access</button></div></div></div>;
 }
 
-function WorkspaceDashboard({ notify, onNavigate, onAddUser, onUploadDocument }: { notify: (text: string) => void; onNavigate: (name: string) => void; onAddUser: () => void; onUploadDocument: () => void }) {
+type VaptHealthSnapshot = { scannedAt: string; summary: { openPorts: number; domainsResolved: number; emailsChecked: number; deliverableEmails: number }; targets: number };
+
+type CompanyRecord = { id: number; name: string; slug: string; status: string; subscriptionStatus?: string; subscriptionEndsAt?: string | null; _count?: { users: number; documents: number; frameworks: number } };
+
+function CompanyUserCreate({ companies, onCreated, notify }: { companies: CompanyRecord[]; onCreated: () => void; notify: (text: string) => void }) {
+  const [companyId, setCompanyId] = useState('');
+  async function createUser(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    try {
+      await api.post('/api/users', { name: form.get('name'), email: form.get('email'), password: form.get('password'), department: form.get('department'), companyId: Number(form.get('companyId')), accessLevel: form.get('accessLevel') });
+      event.currentTarget.reset();
+      setCompanyId('');
+      onCreated();
+      notify('Company login created. The user can sign in with the email and password provided.');
+    } catch { notify('Could not create the company login. Check that the email is unique.'); }
+  }
+  return <form onSubmit={createUser} className="panel p-5"><h2 className="font-display text-sm">Create company login</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Create a database-backed account for a company user. They sign in at the same login page using this email and password.</p><div className="mt-4 grid gap-3 sm:grid-cols-2"><label className="text-[11px] text-[var(--muted)]">Full name<input name="name" required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Work email<input name="email" required type="email" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Temporary password<input name="password" required minLength={8} type="password" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Department<input name="department" required className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Company<select name="companyId" required value={companyId} onChange={event => setCompanyId(event.target.value)} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm"><option value="">Select company</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select></label><label className="text-[11px] text-[var(--muted)]">Access level<select name="accessLevel" defaultValue="ADMIN" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm"><option value="MASTER_ADMIN">Master Admin</option><option value="ADMIN">Admin</option><option value="IT_SECURITY_OFFICER">Security Officer</option><option value="IT_USER">IT User</option></select></label></div><div className="mt-4 flex justify-end"><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Create login</button></div></form>;
+}
+
+function CompanyManagement({ notify }: { notify: (text: string) => void }) {
+  const [companies, setCompanies] = useState<CompanyRecord[]>([]);
+  const [users, setUsers] = useState<Array<{ id: number; name: string; email: string; companyId?: number | null; accessLevel: string }>>([]);
+  const [editing, setEditing] = useState<CompanyRecord | null>(null);
+  const [showCompanyForm, setShowCompanyForm] = useState(false);
+  const [backups, setBackups] = useState<Record<number, Array<{ id: number; name: string; createdAt: string }>>>({});
+  const [form, setForm] = useState({ name: '', slug: '', status: 'ACTIVE', subscriptionStatus: 'ACTIVE', subscriptionEndsAt: '' });
+  useEffect(() => {
+    Promise.all([api.get<CompanyRecord[]>('/api/companies'), api.get<typeof users>('/api/users')]).then(([companyRows, userRows]) => { setCompanies(companyRows); setUsers(userRows); }).catch(() => notify('Could not load company administration data.'));
+  }, [notify]);
+  async function saveCompany(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    try {
+      const saved = editing ? await api.patch<CompanyRecord>('/api/companies', { id: editing.id, ...form }) : await api.post<CompanyRecord>('/api/companies', form);
+      setCompanies(current => editing ? current.map(item => item.id === saved.id ? { ...item, ...saved } : item) : [...current, saved]);
+      setEditing(null); setForm({ name: '', slug: '', status: 'ACTIVE', subscriptionStatus: 'ACTIVE', subscriptionEndsAt: '' }); notify('Company saved.');
+    } catch { notify('Could not save company. Check the name and slug.'); }
+  }
+  async function deleteCompany(company: CompanyRecord) {
+    if (!window.confirm(`Delete ${company.name}? Its users will become unassigned.`)) return;
+    try { await fetch(`/api/companies?id=${company.id}`, { method: 'DELETE' }); setCompanies(current => current.filter(item => item.id !== company.id)); setUsers(current => current.map(user => user.companyId === company.id ? { ...user, companyId: null } : user)); notify(`${company.name} deleted.`); } catch { notify('Could not delete company.'); }
+  }
+  async function assignUser(user: typeof users[number], companyId: string, accessLevel: string) {
+    try { await api.patch('/api/users', { email: user.email, companyId: companyId ? Number(companyId) : null, accessLevel }); setUsers(current => current.map(item => item.id === user.id ? { ...item, companyId: companyId ? Number(companyId) : null, accessLevel } : item)); notify('User access updated.'); } catch { notify('Could not update user access.'); }
+  }
+  async function backupCompany(company: CompanyRecord) {
+    try {
+      const backup = await api.post<{ name: string; payload: string }>('/api/companies/backups', { action: 'create', companyId: company.id });
+      const anchor = document.createElement('a');
+      anchor.href = URL.createObjectURL(new Blob([backup.payload], { type: 'application/json' }));
+      anchor.download = `${company.slug}-backup-${new Date().toISOString().slice(0, 10)}.json`;
+      anchor.click();
+      URL.revokeObjectURL(anchor.href);
+      notify(`${company.name} backup downloaded.`);
+      loadBackups(company.id);
+    } catch { notify('Could not create company backup.'); }
+  }
+  async function loadBackups(companyId: number) {
+    try { const rows = await api.get<Array<{ id: number; name: string; createdAt: string }>>(`/api/companies/backups?companyId=${companyId}`); setBackups(current => ({ ...current, [companyId]: rows })); } catch { notify('Could not load company backups.'); }
+  }
+  async function deleteBackup(companyId: number, id: number) {
+    try { await fetch(`/api/companies/backups?id=${id}`, { method: 'DELETE' }); setBackups(current => ({ ...current, [companyId]: (current[companyId] || []).filter(backup => backup.id !== id) })); notify('Company backup deleted.'); } catch { notify('Could not delete company backup.'); }
+  }
+  async function restoreBackup(companyId: number, file: File | undefined) {
+    if (!file) return;
+    try { const payload = await file.text(); await api.post('/api/companies/backups', { action: 'load', companyId, payload }); notify('Company backup loaded.'); } catch { notify('Could not load company backup.'); }
+  }
+  return <div className="space-y-4"><section className="panel p-5"><div className="mb-5 flex items-center justify-between"><div><div className="text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]">Master administration</div><h2 className="mt-1 font-display text-xl">Company management</h2><p className="mt-2 text-xs text-[var(--muted)]">Create separate company workspaces, manage their lifecycle, and assign users with Master Admin or Admin access.</p></div><button onClick={() => { setEditing(null); setForm({ name: '', slug: '', status: 'ACTIVE', subscriptionStatus: 'ACTIVE', subscriptionEndsAt: '' }); setShowCompanyForm(true); }} className="rounded bg-[var(--teal)] px-3 py-2 text-[10px] font-bold text-[var(--highlight-ink)]">Add company</button></div><div className="grid gap-3 md:grid-cols-2">{companies.map(company => <div key={company.id} className="rounded border border-[var(--line)] bg-[var(--canvas)] p-4"><div className="flex items-start justify-between"><div><strong className="text-sm">{company.name}</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">{company.slug} · {company.status} · {company.subscriptionStatus || 'ACTIVE'}</span></div><div className="flex gap-2"><button onClick={() => { setEditing(company); setForm({ name: company.name, slug: company.slug, status: company.status, subscriptionStatus: company.subscriptionStatus || 'ACTIVE', subscriptionEndsAt: company.subscriptionEndsAt ? company.subscriptionEndsAt.slice(0, 10) : '' }); setShowCompanyForm(true); }} className="text-[10px] text-[var(--teal)]">Edit</button><button onClick={() => deleteCompany(company)} className="text-[10px] text-[var(--coral)]">Delete</button></div></div><div className="mt-3 grid grid-cols-3 gap-2 text-[10px] text-[var(--muted)]"><span>{company._count?.users || 0} users</span><span>{company._count?.documents || 0} documents</span><span>{company._count?.frameworks || 0} certifications</span></div></div>)}</div></section>{(showCompanyForm || companies.length === 0) && <form onSubmit={async event => { await saveCompany(event); setShowCompanyForm(false); }} className="panel grid gap-3 p-5 sm:grid-cols-5"><label className="text-[11px] text-[var(--muted)]">Company name<input required value={form.name} onChange={event => setForm(current => ({ ...current, name: event.target.value }))} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Workspace slug<input value={form.slug} onChange={event => setForm(current => ({ ...current, slug: event.target.value }))} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Status<select value={form.status} onChange={event => setForm(current => ({ ...current, status: event.target.value }))} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm"><option>ACTIVE</option><option>INACTIVE</option></select></label><label className="text-[11px] text-[var(--muted)]">Subscription<select value={form.subscriptionStatus} onChange={event => setForm(current => ({ ...current, subscriptionStatus: event.target.value }))} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm"><option>TRIAL</option><option>ACTIVE</option><option>EXPIRED</option></select></label><label className="text-[11px] text-[var(--muted)]">Ends on<input type="date" value={form.subscriptionEndsAt} onChange={event => setForm(current => ({ ...current, subscriptionEndsAt: event.target.value }))} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><div className="sm:col-span-5 flex justify-end gap-2"><button type="button" onClick={() => setShowCompanyForm(false)} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">{editing ? 'Save changes' : 'Create company'}</button></div></form>}<CompanyUserCreate companies={companies} onCreated={async () => { const rows = await api.get<typeof users>('/api/users'); setUsers(rows); }} notify={notify} /><section className="panel p-5"><h2 className="font-display text-sm">Company user access</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Assign each account to a company and choose its administrative level.</p><div className="mt-4 space-y-2">{users.map(user => <div key={user.id} className="grid items-center gap-3 rounded border border-[var(--line)] bg-[var(--canvas)] p-3 sm:grid-cols-[1fr_180px_170px]"><span><strong className="block text-xs">{user.name}</strong><small className="text-[10px] text-[var(--muted)]">{user.email}</small></span><select value={user.companyId || ''} onChange={event => assignUser(user, event.target.value, user.accessLevel)} className="rounded border border-[var(--line)] bg-[var(--surface)] p-2 text-xs"><option value="">Unassigned</option>{companies.map(company => <option key={company.id} value={company.id}>{company.name}</option>)}</select><select value={user.accessLevel} onChange={event => assignUser(user, String(user.companyId || ''), event.target.value)} className="rounded border border-[var(--line)] bg-[var(--surface)] p-2 text-xs"><option value="MASTER_ADMIN">Master Admin</option><option value="ADMIN">Admin</option><option value="IT_SECURITY_OFFICER">Security Officer</option><option value="IT_USER">IT User</option></select></div>)}</div></section></div>;
+}
+
+function WorkspaceDashboard({ notify, onNavigate, onAddUser, onUploadDocument, onBuildReport }: { notify: (text: string) => void; onNavigate: (name: string) => void; onAddUser: () => void; onUploadDocument: () => void; onBuildReport: () => void }) {
   const [range, setRange] = useState('This week');
-  const [showServiceDetails, setShowServiceDetails] = useState(false);
   const [stats, setStats] = useState({ workItems: 0, assets: 0, members: 0, openIncidents: 0 });
+  const [serviceDetailsOpen, setServiceDetailsOpen] = useState(false);
+  const [vaptHealth, setVaptHealth] = useState<VaptHealthSnapshot | null>(null);
+  useEffect(() => {
+    const loadHealth = () => {
+      const stored = localStorage.getItem('wsi-vapt-latest-report');
+      if (stored) {
+        try { setVaptHealth(JSON.parse(stored) as VaptHealthSnapshot); } catch { setVaptHealth(null); }
+      }
+    };
+    loadHealth();
+    window.addEventListener('storage', loadHealth);
+    return () => window.removeEventListener('storage', loadHealth);
+  }, []);
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -774,9 +857,15 @@ function WorkspaceDashboard({ notify, onNavigate, onAddUser, onUploadDocument }:
   const tasks: Array<[string, string, string]> = [['Review privileged access', 'Access Management', 'Due today'], ['Approve backup verification', 'Backup Management', 'Due tomorrow'], ['Update server maintenance window', 'Server Management', 'Sep 15'], ['Publish security awareness brief', 'Document Library', 'Sep 18']];
   return <div className="space-y-4">
     <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><WorkspaceMetric label="Open work items" value={String(stats.workItems)} detail={`${stats.openIncidents} incidents open`} accent="var(--teal)" /><WorkspaceMetric label="Registered assets" value={String(stats.assets)} detail="In inventory" accent="var(--blue)" /><WorkspaceMetric label="Team members" value={String(stats.members)} detail="User accounts" accent="var(--amber)" /><WorkspaceMetric label="Platform uptime" value="99.98%" detail="All services healthy" accent="var(--coral)" /></div>
-    <div className="grid gap-4 xl:grid-cols-[1.35fr_.65fr]"><section className="panel p-5"><div className="mb-6 flex items-start justify-between"><div><h2 className="font-display text-sm">Operations pulse</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Work activity across the WSI MIS platform.</p></div><select value={range} onChange={event => setRange(event.target.value)} className="rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-[10px] text-[var(--ink)]"><option>This week</option><option>This month</option><option>This quarter</option></select></div><div className="grid h-48 grid-cols-7 items-end gap-3 border-b border-[var(--line)] bg-[linear-gradient(to_bottom,transparent_0%,transparent_24%,var(--line)_25%,transparent_26%,transparent_49%,var(--line)_50%,transparent_51%,transparent_74%,var(--line)_75%,transparent_76%)] px-3">{[45,62,54,78,68,88,72].map((height, index) => <div key={index} className="flex h-full flex-col items-center justify-end gap-2"><div className="w-full max-w-8 rounded-t bg-[var(--teal)] opacity-90" style={{ height: `${height}%` }} /><small className="text-[9px] text-[var(--muted)]">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][index]}</small></div>)}</div><div className="mt-4 flex flex-wrap gap-5 text-[10px] text-[var(--muted)]"><span><i className="mr-2 inline-block h-2 w-2 rounded-full bg-[var(--teal)]" />Completed <b className="text-[var(--ink)]">84</b></span><span><i className="mr-2 inline-block h-2 w-2 rounded-full bg-[var(--blue)]" />In progress <b className="text-[var(--ink)]">28</b></span><span className="ml-auto text-[var(--teal)]">{range} activity</span></div></section><section className="panel p-5"><div className="mb-5"><h2 className="font-display text-sm">Service health</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Live platform availability.</p></div><div className="space-y-4">{[['Cyber Security', 'Operational'], ['Identity services', 'Operational'], ['Backup services', 'Operational'], ['Document library', 'Operational']].map(([name, status]) => <div key={name} className="flex items-center justify-between border-b border-[var(--line)] pb-3 text-xs"><span>{name}</span><span className="flex items-center gap-2 text-[var(--teal)]"><i className="h-2 w-2 rounded-full bg-[var(--teal)]" />{status}</span></div>)}</div><button onClick={() => setShowServiceDetails(true)} className="mt-5 text-[10px] text-[var(--teal)]">View service details →</button>{showServiceDetails && <div className="fixed inset-0 z-50 grid place-items-center bg-[#031015cc] p-5"><div className="w-full max-w-md rounded-lg border border-[var(--teal)] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-4 flex items-center justify-between"><h2 className="font-display text-lg">Service health details</h2><button onClick={() => setShowServiceDetails(false)}><X size={19} /></button></div><div className="space-y-3">{[['Cyber Security platform', 'Operational', 'All security modules responding normally.'], ['Identity services', 'Operational', 'Directory authentication and MFA available.'], ['Backup services', 'Operational', 'Nightly jobs verified; last restore test passed.'], ['Document library', 'Operational', 'Evidence and controlled documents accessible.']].map(([name, status, detail]) => <div key={name} className="rounded border border-[var(--line)] bg-[var(--canvas)] p-3"><div className="flex items-center justify-between"><strong className="text-xs text-[var(--ink)]">{name}</strong><span className="rounded-full bg-[var(--muted-surface)] px-2 py-0.5 text-[9px] text-[var(--teal)]">{status}</span></div><p className="mt-1 text-[10px] text-[var(--muted)]">{detail}</p></div>)}</div><div className="mt-5 flex justify-end"><button onClick={() => setShowServiceDetails(false)} className="rounded bg-[var(--teal)] px-4 py-2 text-xs font-bold text-[var(--highlight-ink)]">Close</button></div></div></div>}</section></div>
-    <div className="grid gap-4 xl:grid-cols-[1fr_1fr]"><section className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-display text-sm">My work queue</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Assigned actions across your workspace.</p></div><span className="rounded-full bg-[var(--highlight)] px-2 py-1 text-[9px] text-[var(--teal)]">4 open</span></div><div className="space-y-3">{tasks.map(([task, module, due]) => <button key={task} onClick={() => onNavigate(module)} className="flex w-full items-center gap-3 border-b border-[var(--line)] pb-3 text-left"><span className="h-2 w-2 shrink-0 rounded-full bg-[var(--amber)]" /><span className="min-w-0 flex-1"><strong className="block truncate text-xs font-normal">{task}</strong><small className="text-[10px] text-[var(--muted)]">{module}</small></span><small className="text-[9px] text-[var(--muted)]">{due}</small><span className="text-[var(--teal)]">→</span></button>)}</div></section><section className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-display text-sm">Quick actions</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Start a common platform workflow.</p></div></div><div className="grid gap-2 sm:grid-cols-2"><button onClick={onAddUser} className="rounded border border-[var(--line)] bg-[var(--highlight)] p-3 text-left text-xs"><strong className="block">＋ Add user</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">Create a role-scoped account</span></button><button onClick={onUploadDocument} className="rounded border border-[var(--line)] bg-[var(--highlight)] p-3 text-left text-xs"><strong className="block">↥ Upload document</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">Add evidence or reference material</span></button><button onClick={() => onNavigate('Security Dashboard')} className="rounded border border-[var(--line)] bg-[var(--highlight)] p-3 text-left text-xs"><strong className="block">◇ Security posture</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">Open executive security view</span></button><button onClick={() => notify('Report builder opened.')} className="rounded border border-[var(--line)] bg-[var(--highlight)] p-3 text-left text-xs"><strong className="block">▥ Build report</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">Prepare a management summary</span></button></div></section></div>
+    <div className="grid gap-4 xl:grid-cols-[1.35fr_.65fr]"><section className="panel p-5"><div className="mb-6 flex items-start justify-between"><div><h2 className="font-display text-sm">Operations pulse</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Work activity across the WSI MIS platform.</p></div><select value={range} onChange={event => setRange(event.target.value)} className="rounded border border-[var(--line)] bg-[var(--surface)] px-2 py-1 text-[10px] text-[var(--ink)]"><option>This week</option><option>This month</option><option>This quarter</option></select></div><div className="grid h-48 grid-cols-7 items-end gap-3 border-b border-[var(--line)] bg-[linear-gradient(to_bottom,transparent_0%,transparent_24%,var(--line)_25%,transparent_26%,transparent_49%,var(--line)_50%,transparent_51%,transparent_74%,var(--line)_75%,transparent_76%)] px-3">{[45,62,54,78,68,88,72].map((height, index) => <div key={index} className="flex h-full flex-col items-center justify-end gap-2"><div className="w-full max-w-8 rounded-t bg-[var(--teal)] opacity-90" style={{ height: `${height}%` }} /><small className="text-[9px] text-[var(--muted)]">{['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][index]}</small></div>)}</div><div className="mt-4 flex flex-wrap gap-5 text-[10px] text-[var(--muted)]"><span><i className="mr-2 inline-block h-2 w-2 rounded-full bg-[var(--teal)]" />Completed <b className="text-[var(--ink)]">84</b></span><span><i className="mr-2 inline-block h-2 w-2 rounded-full bg-[var(--blue)]" />In progress <b className="text-[var(--ink)]">28</b></span><span className="ml-auto text-[var(--teal)]">{range} activity</span></div></section><section className="panel p-5"><div className="mb-5"><h2 className="font-display text-sm">Service health</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Live platform availability.</p></div><div className="space-y-4">{[['Cyber Security', vaptHealth ? (vaptHealth.summary.openPorts ? 'Needs review' : 'Operational') : 'Not assessed'], ['Identity services', 'Operational'], ['Backup services', 'Operational'], ['Document library', 'Operational']].map(([name, status]) => <div key={name} className="flex items-center justify-between border-b border-[var(--line)] pb-3 text-xs"><span>{name}</span><span className={`flex items-center gap-2 ${status === 'Operational' ? 'text-[var(--teal)]' : status === 'Not assessed' ? 'text-[var(--muted)]' : 'text-[var(--amber)]'}`}><i className={`h-2 w-2 rounded-full ${status === 'Operational' ? 'bg-[var(--teal)]' : status === 'Not assessed' ? 'bg-[var(--muted)]' : 'bg-[var(--amber)]'}`} />{status}</span></div>)}</div><button onClick={() => setServiceDetailsOpen(true)} className="mt-5 text-[10px] text-[var(--teal)]">View all services →</button></section></div>
+    <div className="grid gap-4 xl:grid-cols-[1fr_1fr]"><section className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-display text-sm">My work queue</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Assigned actions across your workspace.</p></div><span className="rounded-full bg-[var(--highlight)] px-2 py-1 text-[9px] text-[var(--teal)]">4 open</span></div><div className="space-y-3">{tasks.map(([task, module, due]) => <button key={task} onClick={() => onNavigate(module)} className="flex w-full items-center gap-3 border-b border-[var(--line)] pb-3 text-left"><span className="h-2 w-2 shrink-0 rounded-full bg-[var(--amber)]" /><span className="min-w-0 flex-1"><strong className="block truncate text-xs font-normal">{task}</strong><small className="text-[10px] text-[var(--muted)]">{module}</small></span><small className="text-[9px] text-[var(--muted)]">{due}</small><span className="text-[var(--teal)]">→</span></button>)}</div></section><section className="panel p-5"><div className="mb-4 flex items-center justify-between"><div><h2 className="font-display text-sm">Quick actions</h2><p className="mt-1 text-[10px] text-[var(--muted)]">Start a common platform workflow.</p></div></div><div className="grid gap-2 sm:grid-cols-2"><button onClick={onAddUser} className="rounded border border-[var(--line)] bg-[var(--highlight)] p-3 text-left text-xs"><strong className="block">＋ Add user</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">Create a role-scoped account</span></button><button onClick={onUploadDocument} className="rounded border border-[var(--line)] bg-[var(--highlight)] p-3 text-left text-xs"><strong className="block">↥ Upload document</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">Add evidence or reference material</span></button><button onClick={() => onNavigate('Security Dashboard')} className="rounded border border-[var(--line)] bg-[var(--highlight)] p-3 text-left text-xs"><strong className="block">◇ Security posture</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">Open executive security view</span></button><button onClick={onBuildReport} className="rounded border border-[var(--line)] bg-[var(--highlight)] p-3 text-left text-xs"><strong className="block">▥ Build report</strong><span className="mt-1 block text-[10px] text-[var(--muted)]">Open the report builder with database records</span></button></div></section></div>
+    {serviceDetailsOpen && <ServiceHealthModal vaptHealth={vaptHealth} onClose={() => setServiceDetailsOpen(false)} onNavigate={onNavigate} />}
   </div>;
+}
+
+function ServiceHealthModal({ vaptHealth, onClose, onNavigate }: { vaptHealth: VaptHealthSnapshot | null; onClose: () => void; onNavigate: (name: string) => void }) {
+  const networkStatus = vaptHealth?.summary.openPorts ? 'Needs review' : vaptHealth ? 'Healthy' : 'Not assessed';
+  return <div className="fixed inset-0 z-40 grid place-items-center bg-[#031015cc] p-5"><section className="w-full max-w-lg rounded-lg border border-[var(--teal)] bg-[var(--surface)] p-6 shadow-2xl"><div className="flex items-start justify-between border-b border-[var(--line)] pb-4"><div><span className="text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]">Platform monitoring</span><h2 className="mt-1 font-display text-lg">All services</h2></div><button onClick={onClose} aria-label="Close service details"><X size={19} /></button></div><div className="divide-y divide-[var(--line)]">{[['Cyber Security', networkStatus], ['Identity services', 'Operational'], ['Backup services', 'Operational'], ['Document library', 'Operational']].map(([name, status]) => <div key={name} className="flex items-center justify-between py-3 text-xs"><span>{name}</span><span className={status === 'Operational' || status === 'Healthy' ? 'text-[var(--teal)]' : status === 'Not assessed' ? 'text-[var(--muted)]' : 'text-[var(--amber)]'}>{status}</span></div>)}</div>{vaptHealth ? <p className="mt-4 text-[10px] text-[var(--muted)]">Last network assessment: {new Date(vaptHealth.scannedAt).toLocaleString()} · {vaptHealth.summary.openPorts} open port(s) found across {vaptHealth.targets} target(s).</p> : <p className="mt-4 text-[10px] text-[var(--muted)]">Run a network health check from VAPT Management to connect live findings to this dashboard.</p>}<div className="mt-5 flex justify-end gap-2"><button onClick={onClose} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Close</button><button onClick={() => { onClose(); onNavigate('VAPT Management'); }} className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Open VAPT tools</button></div></section></div>;
 }
 
 type MonitoredServer = { id: number; name: string; host: string; serverType: string; environment: string; status: string; monitoringEnabled?: boolean; responseMs?: number | null; lastCheckedAt?: string | null };
@@ -894,6 +983,7 @@ function ZoneModal({ zone, onClose, onSave }: { zone: { id?: number; name: strin
 
 function DeviceNameModal({ device, onClose, onSave }: { device: DiscoveredDevice; onClose: () => void; onSave: (device: DiscoveredDevice, name: string) => void }) { return <div className="fixed inset-0 z-30 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={event => { event.preventDefault(); onSave(device, String(new FormData(event.currentTarget).get('name'))); }} className="w-full max-w-md rounded-lg border border-[var(--line)] bg-[var(--surface)] p-6"><div className="mb-5 flex items-center justify-between"><h2 className="font-display text-lg">Name device</h2><button type="button" onClick={onClose}><X size={19} /></button></div><p className="mb-4 text-xs text-[var(--muted)]">{device.ipAddress} · {device.deviceType || 'unknown device'}</p><input name="name" required defaultValue={device.name || ''} placeholder="Finance PC 01" className="w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={onClose} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Save name</button></div></form></div>; }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyEditableNetworkOperations({ notify }: { notify: (text: string) => void }) {
   const [zones, setZones] = useState<Array<{ id: number; name: string; cidr: string; gateway: string }>>([]);
   const [editing, setEditing] = useState<{ id?: number; name: string; cidr: string; gateway: string } | null>(null);
@@ -2144,25 +2234,33 @@ function MisDashboard({ notify, onNavigate }: { notify: (text: string) => void; 
 function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) => void; onNavigate: (name: string) => void }) {
   const [documents, setDocuments] = useState<LibraryDocument[]>(seedDocuments);
   const [openFindings, setOpenFindings] = useState(0);
+  const [frameworks, setFrameworks] = useState<Array<{ id: number; name: string; readinessPercent: number; nextReviewDate?: string | null }>>([]);
+  const [showFrameworkForm, setShowFrameworkForm] = useState(false);
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const refresh = async () => {
       try {
         const docs = await api.get<LibraryDocument[]>('/api/documents');
-        if (!cancelled && docs.length) setDocuments(docs);
+        if (!cancelled) setDocuments(docs);
       } catch { /* keep seed */ }
       try {
         const findings = await api.get<GenericRecord[]>('/api/records?module=Audit%20%26%20Findings');
         if (!cancelled) setOpenFindings(findings.filter(record => ['High', 'Critical', 'Open', 'Exception', 'Warning'].includes(record.tag)).length);
       } catch { /* ignore */ }
-    })();
-    return () => { cancelled = true; };
+      try {
+        const rows = await api.get<Array<{ id: number; name: string; readinessPercent: number; nextReviewDate?: string | null }>>('/api/compliance-frameworks');
+        if (!cancelled) setFrameworks(rows);
+      } catch { /* keep */ }
+    };
+    refresh();
+    window.addEventListener('wsi-documents-changed', refresh);
+    return () => { cancelled = true; window.removeEventListener('wsi-documents-changed', refresh); };
   }, []);
   const compliance = computeCompliance(documents);
-  const frameworks = [
-    { name: 'SOC 2 Compliance', score: compliance.frameworks['SOC 2'], status: 'Type II · audit window open' },
-    { name: 'ISO 27001 Compliance', score: compliance.frameworks['ISO 27001'], status: 'Surveillance audit in Q4' },
-    { name: 'DPA Compliance', score: compliance.frameworks['DPA'], status: 'Annual review complete' },
+  const frameworkRows = frameworks.length ? frameworks : [
+    { id: 1, name: 'SOC 2', readinessPercent: compliance.frameworks['SOC 2'] },
+    { id: 2, name: 'ISO 27001', readinessPercent: compliance.frameworks['ISO 27001'] },
+    { id: 3, name: 'DPA', readinessPercent: compliance.frameworks['DPA'] },
   ];
   const findings = [
     { title: 'Update access review evidence for Q3', module: 'Audit & Findings', severity: 'High', due: 'Sep 20' },
@@ -2178,6 +2276,30 @@ function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) =>
   ];
   const approvedDocs = documents.filter(doc => doc.status === 'Approved').length;
   const complianceState = compliance.overall >= 90 ? 'Compliant' : compliance.overall >= 70 ? 'Partially compliant' : 'Attention needed';
+  function exportEvidence() {
+    if (!documents.length) { notify('No evidence documents are available to export.'); return; }
+    const exportedAt = new Date().toISOString();
+    const rows = documents.map(document => ({
+      Evidence: document.name,
+      Category: document.category,
+      Framework: document.framework,
+      Status: document.status,
+      Uploaded: document.uploadedAt,
+      Size: document.size,
+      ExportedAt: exportedAt,
+    }));
+    downloadCsv(`governance-evidence-${new Date().toISOString().slice(0, 10)}.csv`, toCsv(rows));
+    notify(`${rows.length} evidence document(s) exported.`);
+  }
+  function exportEvidencePdf() {
+    const popup = window.open('', '_blank', 'width=1000,height=800');
+    if (!popup) { notify('Popup blocked. Allow popups to export the PDF.'); return; }
+    const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
+    const frameworkTable = frameworkRows.map(framework => `<tr><td>${escapeHtml(framework.name)}</td><td>${framework.readinessPercent}%</td><td>${framework.readinessPercent === 0 ? 'No matching evidence' : framework.readinessPercent >= 90 ? 'Ready' : 'Evidence completion required'}</td></tr>`).join('');
+    const evidenceTable = documents.map(document => `<tr><td>${escapeHtml(document.name)}</td><td>${escapeHtml(document.framework)}</td><td>${escapeHtml(document.category)}</td><td>${escapeHtml(document.status)}</td><td>${escapeHtml(document.uploadedAt)}</td></tr>`).join('');
+    popup.document.write(`<html><head><title>Governance Evidence Report</title><style>body{font-family:Arial,sans-serif;color:#172b35;padding:32px}h1{margin:0 0 6px}h2{margin-top:28px;font-size:18px}p{color:#52656b;font-size:12px}table{border-collapse:collapse;width:100%;font-size:11px;margin-top:10px}th,td{border:1px solid #cbd8dc;padding:8px;text-align:left}th{background:#eaf2f3}.score{font-size:24px;font-weight:bold;color:#167f70}.footer{margin-top:30px;font-size:10px;color:#687a80}@media print{button{display:none}}</style></head><body><h1>IT Governance Evidence Report</h1><p>Generated ${escapeHtml(new Date().toLocaleString())}</p><div class="score">Overall readiness: ${compliance.overall}%</div><h2>Certification readiness</h2><table><thead><tr><th>Certification</th><th>Readiness</th><th>Assessment</th></tr></thead><tbody>${frameworkTable}</tbody></table><h2>Evidence documents</h2><table><thead><tr><th>Document</th><th>Framework</th><th>Category</th><th>Status</th><th>Uploaded</th></tr></thead><tbody>${evidenceTable}</tbody></table><p class="footer">Readiness is calculated from the current database evidence: Approved 100%, Under review 60%, Draft 30%. A certification with no matching evidence is 0%.</p><script>window.onload=function(){window.print()}</script></body></html>`);
+    popup.document.close();
+  }
 
   return (
     <div className="space-y-4">
@@ -2206,21 +2328,25 @@ function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) =>
               <h2 className="font-display text-sm">Compliance frameworks</h2>
               <p className="mt-1 text-[10px] text-[var(--muted)]">Completion status for each certification program.</p>
             </div>
-            <button onClick={() => notify('Compliance evidence export queued.')} className="rounded border border-[var(--line)] px-3 py-2 text-[10px] text-[var(--ink)]">Export evidence</button>
+            <div className="flex gap-2"><button onClick={() => setShowFrameworkForm(true)} className="rounded bg-[var(--teal)] px-3 py-2 text-[10px] font-bold text-[var(--highlight-ink)]">Add certification</button><button onClick={exportEvidencePdf} className="rounded border border-[var(--line)] px-3 py-2 text-[10px] text-[var(--ink)]"><FileText size={12} className="mr-1 inline" />Export PDF</button><button onClick={exportEvidence} className="rounded border border-[var(--line)] px-3 py-2 text-[10px] text-[var(--ink)]"><Download size={12} className="mr-1 inline" />CSV</button></div>
           </div>
           <div className="space-y-4">
-            {frameworks.map(framework => (
-            <button key={framework.name} onClick={() => onNavigate(framework.name)} className="block w-full text-left">
+            {frameworkRows.map(framework => (
+            <div key={framework.name} className="group">
+            <button onClick={() => onNavigate(`${framework.name} Compliance`)} className="block w-full text-left">
                 <div className="flex items-center justify-between text-xs">
                   <strong className="text-[var(--ink)]">{framework.name}</strong>
-                  <span className={framework.score >= 90 ? 'text-[var(--teal)]' : framework.score >= 70 ? 'text-[var(--amber)]' : 'text-[var(--coral)]'}>{framework.score}%</span>
+                  <span className={framework.readinessPercent >= 90 ? 'text-[var(--teal)]' : framework.readinessPercent >= 70 ? 'text-[var(--amber)]' : 'text-[var(--coral)]'}>{framework.readinessPercent}%</span>
                 </div>
-                <div className="mt-2 h-2 rounded bg-[var(--highlight)]"><i className={`block h-full rounded ${framework.score >= 90 ? 'bg-[var(--teal)]' : framework.score >= 70 ? 'bg-[var(--amber)]' : 'bg-[var(--coral)]'}`} style={{ width: `${framework.score}%` }} /></div>
-                <p className="mt-1 text-[10px] text-[var(--muted)]">{framework.status}</p>
+                <div className="mt-2 h-2 rounded bg-[var(--highlight)]"><i className={`block h-full rounded ${framework.readinessPercent >= 90 ? 'bg-[var(--teal)]' : framework.readinessPercent >= 70 ? 'bg-[var(--amber)]' : 'bg-[var(--coral)]'}`} style={{ width: `${framework.readinessPercent}%` }} /></div>
+                <p className="mt-1 text-[10px] text-[var(--muted)]">Readiness from approved, reviewed, and draft evidence.</p>
               </button>
+              {frameworks.length > 0 && <button onClick={async () => { try { await fetch(`/api/compliance-frameworks?id=${framework.id}`, { method: 'DELETE' }); setFrameworks(current => current.filter(item => item.id !== framework.id)); notify(`${framework.name} removed.`); } catch { notify('Could not remove certification framework.'); } }} className="mt-1 hidden text-[10px] text-[var(--coral)] group-hover:block">Remove certification</button>}
+            </div>
             ))}
           </div>
         </section>
+        {showFrameworkForm && <div className="fixed inset-0 z-40 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={async event => { event.preventDefault(); const form = new FormData(event.currentTarget); const name = String(form.get('name') || '').trim(); if (!name) { notify('Certification name is required.'); return; } try { const created = await api.post<{ id: number; name: string; readinessPercent: number }>('/api/compliance-frameworks', { name, readinessPercent: Number(form.get('readinessPercent') || 0), nextReviewDate: form.get('nextReviewDate') || null }); setFrameworks(current => [...current, created]); setShowFrameworkForm(false); notify(`${name} certification program added.`); } catch { notify('Could not add certification program.'); } }} className="w-full max-w-md rounded-lg border border-[var(--teal)] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><span className="text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]">IT Governance</span><h2 className="mt-1 font-display text-lg">Add certification program</h2></div><button type="button" onClick={() => setShowFrameworkForm(false)}><X size={19} /></button></div><div className="grid gap-4"><label className="text-[11px] text-[var(--muted)]">Program name<input name="name" required placeholder="PCI DSS, NIST CSF..." className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Current readiness (%)<input name="readinessPercent" type="number" min="0" max="100" defaultValue="0" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Next review date<input name="nextReviewDate" type="date" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setShowFrameworkForm(false)} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Add program</button></div></form></div>}
 
         <section className="panel p-5">
           <div className="mb-5">
@@ -2392,6 +2518,7 @@ function MaintenanceLogs({ area, storageKey, notify }: { area: string; storageKe
   );
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacySecurityIncidents({ notify }: { notify: (text: string) => void }) {
   const [incidents, setIncidents] = useState<Array<{ id: string; title: string; severity: string; status: string; reportedAt: string }>>([
     { id: 'INC-041', title: 'Suspicious authentication pattern on VPN', severity: 'High', status: 'Investigating', reportedAt: '2026-09-14' },
@@ -2989,6 +3116,7 @@ function DocumentLibrary({ notify }: { notify: (text: string) => void }) {
 
   function persist(next: LibraryDocument[], changed?: { created?: LibraryDocument; deleted?: LibraryDocument }) {
     setDocuments(next);
+    window.dispatchEvent(new Event('wsi-documents-changed'));
     if (changed?.created) api.post('/api/documents', changed.created).catch(() => notify('Could not save document to the database.'));
     if (changed?.deleted) api.del('/api/documents', { id: changed.deleted.id }).catch(() => notify('Could not delete from the database.'));
   }
@@ -3320,6 +3448,7 @@ function ModuleContent({ module, notify }: { module: string; notify: (text: stri
 }
 
 type VaptResult = { target: string; type: string; detail: string; severity: string };
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function LegacyVaptManagement({ notify }: { notify: (text: string) => void }) {
   const [scanType, setScanType] = useState<'ip' | 'port' | 'domain' | 'email'>('ip');
   const [target, setTarget] = useState('');
@@ -3737,6 +3866,8 @@ type VaptScanResult = {
   domainResults: Array<{ domain: string; resolved: boolean; addresses: string[]; http: string; https: string; error?: string }>;
   emailResults: Array<{ email: string; syntax: string; domain: string; mx: string; status: string }>;
 };
+type WebCheckResult = { scannedAt: string; target: string; status: number; redirectedTo: string | null; findings: Array<{ header: string; present: boolean; value: string | null; severity: string }> };
+type NetworkAssessmentResult = { scannedAt: string; target: string; findings: Array<{ name: string; status: string; detail: string; severity: string }> };
 
 function VaptManagement({ notify }: { notify: (text: string) => void }) {
   const [ipsText, setIpsText] = useState('192.168.25.1\n192.168.26.1\n192.168.27.1');
@@ -3745,6 +3876,13 @@ function VaptManagement({ notify }: { notify: (text: string) => void }) {
   const [emailsText, setEmailsText] = useState('admin@wesupportinc.com\nsupport@huntershubinc.com');
   const [scanning, setScanning] = useState(false);
   const [result, setResult] = useState<VaptScanResult | null>(null);
+  const [webTarget, setWebTarget] = useState('');
+  const [webChecking, setWebChecking] = useState(false);
+  const [webResult, setWebResult] = useState<WebCheckResult | null>(null);
+  const [networkTarget, setNetworkTarget] = useState('');
+  const [networkTool, setNetworkTool] = useState<'tls' | 'dns'>('tls');
+  const [networkChecking, setNetworkChecking] = useState(false);
+  const [networkResult, setNetworkResult] = useState<NetworkAssessmentResult | null>(null);
   const [scanHistory, setScanHistory] = useState<Array<{ id: string; scannedAt: string; targets: number; openPorts: number }>>([]);
 
   useEffect(() => {
@@ -3753,6 +3891,32 @@ function VaptManagement({ notify }: { notify: (text: string) => void }) {
   }, []);
 
   function splitList(text: string) { return Array.from(new Set(text.split(/[\n,;]+/).map(item => item.trim()).filter(Boolean))); }
+
+  async function runWebCheck() {
+    if (!webTarget.trim()) { notify('Enter an authorized website or host for the web security check.'); return; }
+    setWebChecking(true);
+    try {
+      const response = await fetch('/api/vapt/web-check', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: webTarget }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Web security check failed.');
+      setWebResult(data as WebCheckResult);
+      notify(`Web security check complete: ${(data.findings as WebCheckResult['findings']).filter(finding => !finding.present).length} missing security header(s).`);
+    } catch (cause) { notify(cause instanceof Error ? cause.message : 'Web security check failed.'); }
+    finally { setWebChecking(false); }
+  }
+
+  async function runNetworkAssessment() {
+    if (!networkTarget.trim()) { notify(`Enter an authorized ${networkTool === 'tls' ? 'hostname or IP' : 'domain'}.`); return; }
+    setNetworkChecking(true);
+    try {
+      const response = await fetch(`/api/vapt/${networkTool === 'tls' ? 'tls-check' : 'dns-check'}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ target: networkTarget }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Network assessment failed.');
+      setNetworkResult(data as NetworkAssessmentResult);
+      notify(`${networkTool === 'tls' ? 'TLS' : 'DNS'} assessment complete.`);
+    } catch (cause) { notify(cause instanceof Error ? cause.message : 'Network assessment failed.'); }
+    finally { setNetworkChecking(false); }
+  }
 
   async function runScan() {
     const ips = splitList(ipsText);
@@ -3771,6 +3935,11 @@ function VaptManagement({ notify }: { notify: (text: string) => void }) {
       const next = [entry, ...scanHistory].slice(0, 8);
       setScanHistory(next);
       localStorage.setItem('wsi-vapt-history', JSON.stringify(next));
+      localStorage.setItem('wsi-vapt-latest-report', JSON.stringify({
+        scannedAt: data.scannedAt,
+        targets: entry.targets,
+        summary: data.summary,
+      }));
       notify(`Scan complete: ${data.summary.openPorts} open port(s), ${data.summary.domainsResolved}/${domains.length} domain(s) resolved.`);
     } catch (cause) { notify(cause instanceof Error ? cause.message : 'VAPT scan failed.'); }
     finally { setScanning(false); }
@@ -3800,7 +3969,7 @@ function VaptManagement({ notify }: { notify: (text: string) => void }) {
           <div>
             <div className="mb-2 text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]">Cyber Security</div>
             <h2 className="font-display text-xl">VAPT Management</h2>
-            <p className="mt-2 max-w-2xl text-xs text-[var(--muted)]">Scan multiple IPs, ports, domains, and email addresses in one run, then export the findings as a report. Only scan assets you are authorized to test.</p>
+            <p className="mt-2 max-w-2xl text-xs text-[var(--muted)]">Run an authorized network health check across IPs and ports, with optional domain and email exposure checks. Findings are reflected on the main dashboard and can be exported as a report.</p>
           </div>
           <div className="flex gap-2">
             <button onClick={() => exportReport('csv')} className="flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-[11px] text-[var(--ink)]"><Download size={14} /> Export CSV</button>
@@ -3810,12 +3979,40 @@ function VaptManagement({ notify }: { notify: (text: string) => void }) {
       </section>
 
       <section className="panel p-5">
+        <div className="mb-4">
+          <h2 className="font-display text-sm">Network penetration testing tools</h2>
+          <p className="mt-1 text-[10px] text-[var(--muted)]">Non-destructive network posture checks for authorized infrastructure. Use TCP exposure, TLS, and DNS results together to prioritize remediation.</p>
+        </div>
+        <div className="mb-3 flex flex-wrap gap-2">
+          <button onClick={() => { setNetworkTool('tls'); setNetworkResult(null); }} className={`rounded border px-3 py-2 text-[10px] ${networkTool === 'tls' ? 'border-[var(--teal)] bg-[var(--highlight)] text-[var(--teal)]' : 'border-[var(--line)]'}`}>TLS / certificate check</button>
+          <button onClick={() => { setNetworkTool('dns'); setNetworkResult(null); }} className={`rounded border px-3 py-2 text-[10px] ${networkTool === 'dns' ? 'border-[var(--teal)] bg-[var(--highlight)] text-[var(--teal)]' : 'border-[var(--line)]'}`}>DNS security check</button>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input value={networkTarget} onChange={event => setNetworkTarget(event.target.value)} placeholder={networkTool === 'tls' ? 'authorized.example.com or 192.168.1.10:443' : 'authorized.example.com'} className="flex-1 rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white focus:border-[var(--teal)] outline-none" />
+          <button onClick={runNetworkAssessment} disabled={networkChecking} className="rounded bg-[var(--teal)] px-4 py-2 text-[11px] font-bold text-[var(--highlight-ink)] disabled:opacity-50">{networkChecking ? 'Assessing...' : `Run ${networkTool === 'tls' ? 'TLS' : 'DNS'} assessment`}</button>
+        </div>
+        {networkResult && <div className="mt-4 space-y-2">{networkResult.findings.map(finding => <div key={finding.name} className="flex flex-col gap-1 rounded border border-[var(--line)] p-3 text-[10px] sm:flex-row sm:items-center sm:justify-between"><div><strong className="text-[var(--ink)]">{finding.name}</strong><span className="ml-2 text-[var(--muted)]">{finding.detail}</span></div><span className={finding.status === 'pass' ? 'text-[var(--teal)]' : finding.severity === 'High' ? 'text-[var(--coral)]' : 'text-[var(--amber)]'}>{finding.status === 'pass' ? 'Pass' : `${finding.severity} · Review`}</span></div>)}</div>}
+      </section>
+
+      <section className="panel p-5">
+        <div className="mb-4">
+          <h2 className="font-display text-sm">Web security header check</h2>
+          <p className="mt-1 text-[10px] text-[var(--muted)]">An additional authorized pentest tool that checks HTTPS response headers commonly used to reduce clickjacking, MIME sniffing, referrer leakage, and transport risks.</p>
+        </div>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <input value={webTarget} onChange={event => setWebTarget(event.target.value)} placeholder="https://your-authorized-domain.example" className="flex-1 rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white focus:border-[var(--teal)] outline-none" />
+          <button onClick={runWebCheck} disabled={webChecking} className="rounded bg-[var(--teal)] px-4 py-2 text-[11px] font-bold text-[var(--highlight-ink)] disabled:opacity-50">{webChecking ? 'Checking...' : 'Check web security'}</button>
+        </div>
+        {webResult && <div className="mt-4 grid gap-2 sm:grid-cols-2">{webResult.findings.map(finding => <div key={finding.header} className="flex items-center justify-between rounded border border-[var(--line)] p-3 text-[10px]"><span>{finding.header}</span><span className={finding.present ? 'text-[var(--teal)]' : finding.severity === 'High' ? 'text-[var(--coral)]' : 'text-[var(--amber)]'}>{finding.present ? 'Present' : `Missing · ${finding.severity}`}</span></div>)}</div>}
+      </section>
+
+      <section className="panel p-5">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <h2 className="font-display text-sm">Scan configuration</h2>
             <p className="mt-1 text-[10px] text-[var(--muted)]">Enter one target per line (or comma-separated). All sections are optional but at least one target is required.</p>
           </div>
-          <button onClick={runScan} disabled={scanning} className="flex items-center gap-2 rounded-md bg-[var(--teal)] px-4 py-2 text-[11px] font-bold text-[var(--highlight-ink)] disabled:opacity-50"><Search size={14} /> {scanning ? 'Scanning...' : 'Run scan'}</button>
+          <button onClick={runScan} disabled={scanning} className="flex items-center gap-2 rounded-md bg-[var(--teal)] px-4 py-2 text-[11px] font-bold text-[var(--highlight-ink)] disabled:opacity-50"><Search size={14} /> {scanning ? 'Checking network...' : 'Run network health check'}</button>
         </div>
         <div className="grid gap-4 sm:grid-cols-2">
           <label className="text-[11px] text-[#8ca2a4]">Target IPs <span className="text-[var(--muted)]">(one per line)</span>
@@ -3841,6 +4038,10 @@ function VaptManagement({ notify }: { notify: (text: string) => void }) {
             <WorkspaceMetric label="Deliverable emails" value={String(result.summary.deliverableEmails)} detail={`of ${result.summary.emailsChecked} checked`} accent="var(--blue)" />
             <WorkspaceMetric label="Scan duration" value={`${(result.durationMs / 1000).toFixed(1)}s`} detail={new Date(result.scannedAt).toLocaleTimeString()} accent="var(--amber)" />
           </div>
+          <section className={`panel flex flex-col gap-2 border-l-4 p-4 ${result.summary.openPorts > 0 ? 'border-l-[var(--amber)]' : 'border-l-[var(--teal)]'}`}>
+            <strong className="text-xs">{result.summary.openPorts > 0 ? 'Network needs review' : 'Network health check passed'}</strong>
+            <p className="text-[10px] text-[var(--muted)]">{result.summary.openPorts > 0 ? `${result.summary.openPorts} open port(s) were detected. Confirm each is required, patched, and protected by access controls.` : 'No open ports were detected in the configured checks. Review the detailed results and repeat checks on a regular schedule.'} This result is linked to the Dashboard service health view.</p>
+          </section>
 
           {result.portResults.length > 0 && (
             <section className="panel overflow-hidden">
@@ -4019,9 +4220,13 @@ type SystemSettings = {
   aiModel: string;
   aiBaseUrl: string;
   aiAssist: string[];
+  apiConnections: string;
+  customFrameworks: string;
 };
+type ApiConnection = { id: string; title: string; url: string; authType: 'apiKey' | 'basic' | 'none'; apiKey: string; username: string; password: string; enabled: boolean };
+type CustomFramework = { id: string; name: string; description: string; owner: string; enabled: boolean };
 
-const defaultSystemSettings: SystemSettings = { orgName: 'WeSupport, Incorporated', department: 'Cyber Security Department', companyLogo: '', companyTagline: 'Cyber Security Management Information System', companyEmail: 'security@wsi.local', companyPhone: '+63 917 555 0100', companyAddress: 'WSI Main Office', companyWebsite: '', sessionTimeout: '30', retentionDays: '400', notificationsEmail: 'security@wsi.local', enforceMfa: true, autoBackup: true, aiEnabled: false, aiProvider: 'OpenAI', aiApiKey: '', aiModel: 'gpt-4o-mini', aiBaseUrl: '', aiAssist: ['Document checking'] };
+const defaultSystemSettings: SystemSettings = { orgName: 'WeSupport, Incorporated', department: 'Cyber Security Department', companyLogo: '', companyTagline: 'Cyber Security Management Information System', companyEmail: 'security@wsi.local', companyPhone: '+63 917 555 0100', companyAddress: 'WSI Main Office', companyWebsite: '', sessionTimeout: '30', retentionDays: '400', notificationsEmail: 'security@wsi.local', enforceMfa: true, autoBackup: true, aiEnabled: false, aiProvider: 'OpenAI', aiApiKey: '', aiModel: 'gpt-4o-mini', aiBaseUrl: '', aiAssist: ['Document checking'], apiConnections: '[]', customFrameworks: '[]' };
 const aiProviders = ['OpenAI', 'Azure OpenAI', 'Anthropic', 'Google Gemini', 'Custom'];
 const aiAssistOptions = ['Document checking', 'Incident triage', 'Vulnerability summaries', 'Report drafting', 'Compliance gap hints'];
 
@@ -4033,38 +4238,17 @@ function loadSystemSettings(): SystemSettings {
   return defaultSystemSettings;
 }
 
-function ConnectedModuleView({ module, notify }: { module: CustomModule; notify: (text: string) => void }) {
-  return (
-    <div className="panel space-y-4 p-6">
-      <div className="flex items-center justify-between gap-3">
-        <div>
-          <span className="text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]">Connected system</span>
-          <h2 className="mt-1 font-display text-xl">{module.title}</h2>
-        </div>
-        <button type="button" onClick={() => notify(`${module.title} synchronization requested.`)} className="rounded border border-[var(--line)] px-3 py-1.5 text-[10px] text-[var(--ink)]">Sync now</button>
-      </div>
-      <p className="text-sm text-[var(--muted)]">{module.description || 'Connected external system.'}</p>
-      <div className="grid gap-3 md:grid-cols-2">
-        <div className="rounded border border-[var(--line)] bg-[var(--canvas)] p-3">
-          <div className="text-[10px] uppercase tracking-[1.4px] text-[var(--muted)]">Base URL</div>
-          <a href={module.baseUrl || '#'} target="_blank" rel="noreferrer" className="mt-2 block break-all text-xs text-[var(--teal)]">{module.baseUrl || 'Not configured'}</a>
-        </div>
-        <div className="rounded border border-[var(--line)] bg-[var(--canvas)] p-3">
-          <div className="text-[10px] uppercase tracking-[1.4px] text-[var(--muted)]">API key</div>
-          <div className="mt-2 text-xs text-[var(--ink)]">{module.apiKey ? 'Configured and encrypted' : 'Not configured'}</div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function SystemSettingsModal({ theme, onThemeChange, customModules, onCustomModulesChange, notify, onClose }: { theme: string; onThemeChange: (value: string) => void; customModules: CustomModule[]; onCustomModulesChange: (value: CustomModule[]) => void; notify: (text: string) => void; onClose: () => void }) {
-  const [tab, setTab] = useState<'general' | 'security' | 'ai' | 'data'>('general');
+function SystemSettingsModal({ theme, onThemeChange, notify, onClose }: { theme: string; onThemeChange: (value: string) => void; notify: (text: string) => void; onClose: () => void }) {
+  const [tab, setTab] = useState<'general' | 'security' | 'ai' | 'connections' | 'frameworks' | 'data'>('general');
   const [settings, setSettings] = useState<SystemSettings>(defaultSystemSettings);
   const [showKey, setShowKey] = useState(false);
   const [busy, setBusy] = useState(false);
   const [logoPreview, setLogoPreview] = useState('');
   const restoreRef = useRef<HTMLInputElement | null>(null);
+  const [apiConnections, setApiConnections] = useState<ApiConnection[]>([]);
+  const [customFrameworks, setCustomFrameworks] = useState<CustomFramework[]>([]);
+  const [connectionForm, setConnectionForm] = useState<Omit<ApiConnection, 'id'>>({ title: '', url: '', authType: 'apiKey', apiKey: '', username: '', password: '', enabled: true });
+  const [frameworkForm, setFrameworkForm] = useState<Omit<CustomFramework, 'id'>>({ name: '', description: '', owner: '', enabled: true });
 
   useEffect(() => {
     let cancelled = false;
@@ -4075,6 +4259,8 @@ function SystemSettingsModal({ theme, onThemeChange, customModules, onCustomModu
           const parsed = { ...defaultSystemSettings, ...(JSON.parse(stored['system-settings']) as Partial<SystemSettings>) };
           setSettings(parsed);
           setLogoPreview(parsed.companyLogo);
+          try { setApiConnections(JSON.parse(parsed.apiConnections) as ApiConnection[]); } catch { setApiConnections([]); }
+          try { setCustomFrameworks(JSON.parse(parsed.customFrameworks) as CustomFramework[]); } catch { setCustomFrameworks([]); }
         }
       } catch { if (!cancelled) setSettings(loadSystemSettings()); }
     })();
@@ -4085,27 +4271,29 @@ function SystemSettingsModal({ theme, onThemeChange, customModules, onCustomModu
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     const next: SystemSettings = {
-      orgName: String(form.get('orgName') || '').trim(),
-      department: String(form.get('department') || '').trim(),
+      orgName: String(form.get('orgName') ?? settings.orgName).trim(),
+      department: String(form.get('department') ?? settings.department).trim(),
       companyLogo: logoPreview,
-      companyTagline: String(form.get('companyTagline') || '').trim(),
-      companyEmail: String(form.get('companyEmail') || '').trim(),
-      companyPhone: String(form.get('companyPhone') || '').trim(),
-      companyAddress: String(form.get('companyAddress') || '').trim(),
-      companyWebsite: String(form.get('companyWebsite') || '').trim(),
-      sessionTimeout: String(form.get('sessionTimeout') || '30'),
-      retentionDays: String(form.get('retentionDays') || '400'),
-      notificationsEmail: String(form.get('notificationsEmail') || '').trim(),
-      enforceMfa: form.get('enforceMfa') === 'on',
-      autoBackup: form.get('autoBackup') === 'on',
-      aiEnabled: form.get('aiEnabled') === 'on',
-      aiProvider: String(form.get('aiProvider') || 'OpenAI'),
-      aiApiKey: String(form.get('aiApiKey') || '').trim(),
-      aiModel: String(form.get('aiModel') || '').trim(),
-      aiBaseUrl: String(form.get('aiBaseUrl') || '').trim(),
-      aiAssist: aiAssistOptions.filter(option => form.get(`assist-${option}`) === 'on'),
+      companyTagline: String(form.get('companyTagline') ?? settings.companyTagline).trim(),
+      companyEmail: String(form.get('companyEmail') ?? settings.companyEmail).trim(),
+      companyPhone: String(form.get('companyPhone') ?? settings.companyPhone).trim(),
+      companyAddress: String(form.get('companyAddress') ?? settings.companyAddress).trim(),
+      companyWebsite: String(form.get('companyWebsite') ?? settings.companyWebsite).trim(),
+      sessionTimeout: String(form.get('sessionTimeout') ?? settings.sessionTimeout),
+      retentionDays: String(form.get('retentionDays') ?? settings.retentionDays),
+      notificationsEmail: String(form.get('notificationsEmail') ?? settings.notificationsEmail).trim(),
+      enforceMfa: form.has('enforceMfa') ? form.get('enforceMfa') === 'on' : settings.enforceMfa,
+      autoBackup: form.has('autoBackup') ? form.get('autoBackup') === 'on' : settings.autoBackup,
+      aiEnabled: form.has('aiEnabled') ? form.get('aiEnabled') === 'on' : settings.aiEnabled,
+      aiProvider: String(form.get('aiProvider') ?? settings.aiProvider),
+      aiApiKey: String(form.get('aiApiKey') ?? settings.aiApiKey).trim(),
+      aiModel: String(form.get('aiModel') ?? settings.aiModel).trim(),
+      aiBaseUrl: String(form.get('aiBaseUrl') ?? settings.aiBaseUrl).trim(),
+      aiAssist: aiAssistOptions.some(option => form.has(`assist-${option}`)) ? aiAssistOptions.filter(option => form.get(`assist-${option}`) === 'on') : settings.aiAssist,
+      apiConnections: JSON.stringify(apiConnections),
+      customFrameworks: JSON.stringify(customFrameworks),
     };
-    try { await api.post('/api/settings', { 'system-settings': JSON.stringify(next) }); } catch { notify('Could not persist settings to the database; kept locally.'); }
+    try { await api.post('/api/settings', { 'system-settings': JSON.stringify(next) }); } catch (cause) { notify(cause instanceof Error ? cause.message : 'Could not persist settings to the database.'); return; }
     localStorage.setItem('wsi-system-settings', JSON.stringify(next));
     setSettings(next);
     notify('Settings saved.');
@@ -4160,9 +4348,9 @@ function SystemSettingsModal({ theme, onThemeChange, customModules, onCustomModu
           <button type="button" onClick={onClose} className="rounded p-1 text-[var(--muted)] hover:text-white"><X size={19} /></button>
         </div>
         <div className="flex gap-2 border-b border-[var(--line)] px-5 pt-4">
-          {(['general', 'security', 'ai', 'data'] as const).map(key => (
+          {(['general', 'security', 'ai', 'connections', 'data'] as const).map(key => (
             <button key={key} type="button" onClick={() => setTab(key)} className={`rounded-t-md border-b-2 px-3 py-2 text-[11px] transition ${tab === key ? 'border-[var(--teal)] font-semibold text-[var(--teal)]' : 'border-transparent text-[var(--muted)]'}`}>
-              {key === 'general' ? 'General' : key === 'security' ? 'Security & Integrations' : key === 'ai' ? 'AI Assistant' : 'Data & Backup'}
+              {key === 'general' ? 'General' : key === 'security' ? 'Security' : key === 'ai' ? 'AI Assistant' : key === 'connections' ? 'API Connections' : 'Data & Backup'}
             </button>
           ))}
         </div>
@@ -4250,6 +4438,36 @@ function SystemSettingsModal({ theme, onThemeChange, customModules, onCustomModu
               </div>
             </>
           )}
+          {tab === 'connections' && (
+            <section className="space-y-3">
+              <div><h3 className="font-display text-sm">Connected applications</h3><p className="mt-1 text-[10px] text-[var(--muted)]">Add an application once, then future connectors can use its saved connection details.</p></div>
+              <div className="space-y-2">{apiConnections.map(connection => <div key={connection.id} className="rounded border border-[var(--line)] bg-[var(--canvas)] p-3"><div className="flex items-center justify-between"><strong className="text-xs">{connection.title}</strong><button type="button" onClick={() => setApiConnections(current => current.filter(item => item.id !== connection.id))} className="text-[10px] text-[var(--coral)]">Remove</button></div><span className="mt-1 block truncate text-[10px] text-[var(--muted)]">{connection.url} · {connection.authType === 'basic' ? 'Username and password' : connection.authType === 'apiKey' ? 'API key' : 'No authentication'} · {connection.enabled ? 'Enabled' : 'Disabled'}</span></div>)}</div>
+              <div className="grid gap-3 rounded border border-[var(--line)] p-3 sm:grid-cols-2">
+                <label className="text-[11px] text-[var(--muted)]">Title<input value={connectionForm.title} onChange={event => setConnectionForm(current => ({ ...current, title: event.target.value }))} placeholder="SIEM, ticketing, monitoring..." className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white" /></label>
+                <label className="text-[11px] text-[var(--muted)]">API URL<input value={connectionForm.url} onChange={event => setConnectionForm(current => ({ ...current, url: event.target.value }))} placeholder="https://example.com/api" type="url" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white" /></label>
+                <label className="text-[11px] text-[var(--muted)]">Authentication<select value={connectionForm.authType} onChange={event => setConnectionForm(current => ({ ...current, authType: event.target.value as ApiConnection['authType'] }))} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white"><option value="apiKey">API key</option><option value="basic">Username and password</option><option value="none">No authentication</option></select></label>
+                {connectionForm.authType === 'apiKey' && <label className="text-[11px] text-[var(--muted)]">API key<input value={connectionForm.apiKey} onChange={event => setConnectionForm(current => ({ ...current, apiKey: event.target.value }))} type="password" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white" /></label>}
+                {connectionForm.authType === 'basic' && <><label className="text-[11px] text-[var(--muted)]">Username<input value={connectionForm.username} onChange={event => setConnectionForm(current => ({ ...current, username: event.target.value }))} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white" /></label><label className="text-[11px] text-[var(--muted)]">Password<input value={connectionForm.password} onChange={event => setConnectionForm(current => ({ ...current, password: event.target.value }))} type="password" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white" /></label></>}
+                <label className="flex items-center gap-2 text-[11px] text-[var(--muted)]"><input type="checkbox" checked={connectionForm.enabled} onChange={event => setConnectionForm(current => ({ ...current, enabled: event.target.checked }))} className="accent-[#49d4bf]" /> Enabled</label>
+                <button type="button" onClick={() => { if (!connectionForm.title.trim() || !connectionForm.url.trim()) { notify('Enter an application title and API URL.'); return; } setApiConnections(current => [...current, { ...connectionForm, id: `connection-${Date.now()}` }]); setConnectionForm({ title: '', url: '', authType: 'apiKey', apiKey: '', username: '', password: '', enabled: true }); }} className="rounded bg-[var(--teal)] px-3 py-2 text-[11px] font-bold text-[var(--highlight-ink)]">Add connection</button>
+              </div>
+              <p className="text-[10px] text-[var(--muted)]">Credentials are stored in the application settings record. Use server-side secret management before production deployment.</p>
+            </section>
+          )}
+          {tab === 'frameworks' && (
+            <section className="space-y-3">
+              <div><h3 className="font-display text-sm">Custom compliance frameworks</h3><p className="mt-1 text-[10px] text-[var(--muted)]">A framework is a set of security or compliance requirements used to organize policies, evidence, findings, and reports.</p></div>
+              <div className="space-y-2">{customFrameworks.map(framework => <div key={framework.id} className="rounded border border-[var(--line)] bg-[var(--canvas)] p-3"><div className="flex items-center justify-between"><strong className="text-xs">{framework.name}</strong><button type="button" onClick={() => setCustomFrameworks(current => current.filter(item => item.id !== framework.id))} className="text-[10px] text-[var(--coral)]">Remove</button></div><span className="mt-1 block text-[10px] text-[var(--muted)]">{framework.description || 'No description'} · Owner: {framework.owner || 'Unassigned'} · {framework.enabled ? 'Enabled' : 'Disabled'}</span></div>)}</div>
+              <div className="grid gap-3 rounded border border-[var(--line)] p-3 sm:grid-cols-2">
+                <label className="text-[11px] text-[var(--muted)]">Framework name<input value={frameworkForm.name} onChange={event => setFrameworkForm(current => ({ ...current, name: event.target.value }))} placeholder="NIST CSF, CIS Controls..." className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white" /></label>
+                <label className="text-[11px] text-[var(--muted)]">Owner<input value={frameworkForm.owner} onChange={event => setFrameworkForm(current => ({ ...current, owner: event.target.value }))} placeholder="Cyber Security Department" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white" /></label>
+                <label className="text-[11px] text-[var(--muted)] sm:col-span-2">Description<textarea value={frameworkForm.description} onChange={event => setFrameworkForm(current => ({ ...current, description: event.target.value }))} rows={3} placeholder="What requirements or controls does this framework cover?" className="mt-1 w-full resize-none rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-xs text-white" /></label>
+                <label className="flex items-center gap-2 text-[11px] text-[var(--muted)]"><input type="checkbox" checked={frameworkForm.enabled} onChange={event => setFrameworkForm(current => ({ ...current, enabled: event.target.checked }))} className="accent-[#49d4bf]" /> Enabled</label>
+                <button type="button" onClick={() => { if (!frameworkForm.name.trim()) { notify('Enter a framework name.'); return; } setCustomFrameworks(current => [...current, { ...frameworkForm, id: `framework-${Date.now()}` }]); setFrameworkForm({ name: '', description: '', owner: '', enabled: true }); }} className="rounded bg-[var(--teal)] px-3 py-2 text-[11px] font-bold text-[var(--highlight-ink)]">Add framework</button>
+              </div>
+              <p className="text-[10px] text-[var(--muted)]">After saving, framework names can be used to classify uploaded documents and future compliance reports.</p>
+            </section>
+          )}
           {tab === 'data' && (
             <>
               <div className="rounded border border-[var(--line)] bg-[var(--canvas)] p-4">
@@ -4294,11 +4512,20 @@ function NotificationsDrawer({ notifications, onNavigate, onMarkAllRead, onClose
 
 function SearchOverlay({ term, setTerm, users: userList, onNavigate, onClose }: { term: string; setTerm: (term: string) => void; users: typeof users; onNavigate: (module: string) => void; onClose: () => void }) {
   const query = term.trim().toLowerCase();
-  const moduleResults = nav.filter(module => module.toLowerCase().includes(query));
-  const userResults = userList.filter(user => `${user.name} ${user.department} ${user.role} ${user.email}`.toLowerCase().includes(query));
-  const serverKeywords = ['Server Management', 'Active Directory', 'Windows Server', 'Domain Controller'];
-  const serverResults = query && serverKeywords.some(keyword => keyword.toLowerCase().includes(query)) ? ['Server Management'] : [];
-  return <div className="fixed inset-0 z-50 bg-[#031015aa] p-5" onClick={onClose}><div onClick={event => event.stopPropagation()} className="mx-auto mt-[10vh] w-full max-w-2xl overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-2xl"><div className="flex items-center gap-3 border-b border-[var(--line)] p-4"><Search size={19} className="text-[var(--teal)]" /><input autoFocus value={term} onChange={event => setTerm(event.target.value)} onKeyDown={event => event.key === 'Escape' && onClose()} placeholder="Search users, modules, servers, or departments…" className="flex-1 bg-transparent text-sm text-[var(--ink)] outline-none" /><kbd className="rounded border border-[var(--line)] px-2 py-1 text-[9px] text-[var(--muted)]">ESC</kbd><button onClick={onClose} className="text-[var(--muted)]"><X size={17} /></button></div><div className="max-h-[55vh] overflow-y-auto p-3">{!query ? <div className="p-8 text-center text-xs text-[var(--muted)]">Start typing to search the workspace.</div> : moduleResults.length === 0 && userResults.length === 0 && serverResults.length === 0 ? <div className="p-8 text-center text-xs text-[var(--muted)]">No results for “{term}”.</div> : <div className="space-y-4">{userResults.length > 0 && <SearchGroup title="People">{userResults.map(user => <button key={user.email} onClick={() => onNavigate('User Management')} className="flex w-full items-center gap-3 rounded p-3 text-left hover:bg-[var(--highlight)]"><UserAvatar user={user} sizeClass="h-8 w-8" textClass="text-[9px]" /><span><strong className="block text-xs">{user.name}</strong><small className="text-[10px] text-[var(--muted)]">{user.role} · {user.department}</small></span></button>)}</SearchGroup>}{serverResults.length > 0 && <SearchGroup title="Infrastructure">{serverResults.map(result => <button key={result} onClick={() => onNavigate(result)} className="flex w-full items-center gap-3 rounded p-3 text-left hover:bg-[var(--highlight)]"><Server size={17} className="text-[var(--teal)]" /><span><strong className="block text-xs">{result}</strong><small className="text-[10px] text-[var(--muted)]">Monitored servers and Active Directory</small></span></button>)}</SearchGroup>}{moduleResults.length > 0 && <SearchGroup title="Modules">{moduleResults.slice(0, 8).map(module => <button key={module} onClick={() => onNavigate(module)} className="flex w-full items-center gap-3 rounded p-3 text-left hover:bg-[var(--highlight)]"><span className="text-[var(--teal)]">◇</span><span className="text-xs">{module}</span><span className="ml-auto text-[10px] text-[var(--muted)]">Open →</span></button>)}</SearchGroup>}</div>}</div></div></div>;
+  const [results, setResults] = useState<Array<{ id: string; group: string; title: string; detail: string; module: string }>>([]);
+  const [loading, setLoading] = useState(false);
+  useEffect(() => {
+    if (query.length < 2) { setResults([]); return; }
+    let cancelled = false;
+    setLoading(true);
+    fetch(`/api/search?q=${encodeURIComponent(query)}`).then(response => response.ok ? response.json() as Promise<{ results: typeof results }> : Promise.reject(new Error('Search failed.'))).then(data => { if (!cancelled) setResults(data.results); }).catch(() => { if (!cancelled) setResults([]); }).finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [query]);
+  const localUsers = userList.filter(user => `${user.name} ${user.department} ${user.role} ${user.email}`.toLowerCase().includes(query)).map(user => ({ id: `local-${user.email}`, group: 'People', title: user.name, detail: `${user.role} · ${user.email}`, module: 'User Management' }));
+  const moduleResults = nav.filter(module => module.toLowerCase().includes(query)).map(module => ({ id: `module-${module}`, group: 'Modules', title: module, detail: 'Open workspace module', module }));
+  const allResults = [...localUsers, ...moduleResults, ...results.filter(result => !localUsers.some(local => local.title === result.title && local.group === result.group))];
+  const groups = Array.from(new Set(allResults.map(result => result.group)));
+  return <div className="fixed inset-0 z-50 bg-[#031015aa] p-5" onClick={onClose}><div onClick={event => event.stopPropagation()} className="mx-auto mt-[10vh] w-full max-w-2xl overflow-hidden rounded-lg border border-[var(--line)] bg-[var(--surface)] shadow-2xl"><div className="flex items-center gap-3 border-b border-[var(--line)] p-4"><Search size={19} className="text-[var(--teal)]" /><input autoFocus value={term} onChange={event => setTerm(event.target.value)} onKeyDown={event => event.key === 'Escape' && onClose()} placeholder="Search users, documents, assets, servers, modules..." className="flex-1 bg-transparent text-sm text-[var(--ink)] outline-none" /><kbd className="rounded border border-[var(--line)] px-2 py-1 text-[9px] text-[var(--muted)]">ESC</kbd><button onClick={onClose} className="text-[var(--muted)]"><X size={17} /></button></div><div className="max-h-[55vh] overflow-y-auto p-3">{!query ? <div className="p-8 text-center text-xs text-[var(--muted)]">Start typing to search the entire system.</div> : loading ? <div className="p-8 text-center text-xs text-[var(--muted)]">Searching system records...</div> : allResults.length === 0 ? <div className="p-8 text-center text-xs text-[var(--muted)]">No results for “{term}”.</div> : <div className="space-y-4">{groups.map(group => <SearchGroup key={group} title={group}>{allResults.filter(result => result.group === group).slice(0, 12).map(result => <button key={result.id} onClick={() => onNavigate(result.module)} className="flex w-full items-center gap-3 rounded p-3 text-left hover:bg-[var(--highlight)]"><span className="grid h-8 w-8 place-items-center rounded bg-[var(--highlight)] text-[var(--teal)]">{group === 'People' ? '◈' : group === 'Infrastructure' ? <Server size={16} /> : '◇'}</span><span className="min-w-0 flex-1"><strong className="block truncate text-xs">{result.title}</strong><small className="block truncate text-[10px] text-[var(--muted)]">{result.detail}</small></span><span className="text-[10px] text-[var(--muted)]">Open →</span></button>)}</SearchGroup>)}</div>}</div></div></div>;
 }
 
 function SearchGroup({ title, children }: { title: string; children: React.ReactNode }) { return <section><h3 className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[1.3px] text-[var(--teal)]">{title}</h3><div className="divide-y divide-[var(--line)]">{children}</div></section>; }
