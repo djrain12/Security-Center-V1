@@ -72,3 +72,30 @@ For a new installation, `prisma migrate deploy` creates the tables. For an exist
 ## Standalone startup note
 
 The normal source package is intentionally included so cPanel can install dependencies and run Prisma migrations. For a smaller runtime package, run `npm run build`, then use the generated standalone server and copy `.next/static` into `.next/standalone/.next/static` plus `public` into `.next/standalone/public` before uploading. Keep the Prisma migrations available until deployment is complete.
+
+## Docker deployment
+
+The repository includes `Dockerfile`, `.dockerignore`, and `docker-compose.yml` for a production container deployment. Docker Compose starts MySQL, waits for its health check, applies Prisma migrations, and starts the Next.js standalone server.
+
+1. Copy `.env.example` to `.env` and set `SESSION_SECRET`, owner/demo seed credentials, and database passwords.
+2. Review the `DATABASE_URL` values in `docker-compose.yml`; the default Compose database is internal and is named `security_center`.
+3. Build and start the stack:
+
+```bash
+docker compose up -d --build
+```
+
+4. Seed the initial accounts once:
+
+```bash
+docker compose exec app npx tsx prisma/seed.ts
+```
+
+5. Check the application:
+
+```bash
+docker compose ps
+docker compose logs -f app
+```
+
+Do not commit `.env` or production credentials. Use HTTPS at the reverse proxy and set `SESSION_COOKIE_SECURE=true` when TLS terminates in front of the container.

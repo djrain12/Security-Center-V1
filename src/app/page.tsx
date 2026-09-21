@@ -4,6 +4,7 @@
 import { FormEvent, startTransition, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import AuditLogs from './audit-logs';
 import { Bell, ChevronDown, Copy, Download, Eye, EyeOff, FileText, Laptop, LoaderCircle, Mail, Menu, Monitor, Pencil, Plus, RefreshCw, Scan, Search, Server, ShieldCheck, Smartphone, Trash2, Upload, Video, X } from 'lucide-react';
 
 const nav = ['Security Dashboard', 'Security Incidents', 'Security Events', 'Vulnerability Management', 'VAPT Management', 'Risk Management', 'Security Assets', 'Access Management', 'Network Security', 'Server Security', 'Backup Security'];
@@ -68,6 +69,7 @@ export default function Dashboard() {
   const [notice, setNotice] = useState('');
   const [chatOpen, setChatOpen] = useState(false);
   const [chatUnread, setChatUnread] = useState(0);
+  const [customFrameworkNames, setCustomFrameworkNames] = useState<string[]>([]);
   const [pageLoading, setPageLoading] = useState(true);
   const [tabLoading, setTabLoading] = useState(false);
   const isDashboard = active === 'Security Dashboard';
@@ -77,6 +79,12 @@ export default function Dashboard() {
   const [theme, setTheme] = useState('light');
   const [branding, setBranding] = useState<{ name: string; tagline: string; logo: string }>({ name: 'WeSupport, Incorporated', tagline: 'WSI MIS', logo: '' });
 
+  useEffect(() => {
+    const loadFrameworkNavigation = () => api.get<Array<{ name: string }>>('/api/compliance-frameworks').then(rows => setCustomFrameworkNames(rows.map(row => `${row.name} Compliance`).filter(name => !governanceNav.includes(name)))).catch(() => {});
+    loadFrameworkNavigation();
+    window.addEventListener('wsi-frameworks-changed', loadFrameworkNavigation);
+    return () => window.removeEventListener('wsi-frameworks-changed', loadFrameworkNavigation);
+  }, []);
   useEffect(() => {
     const storedUsers = localStorage.getItem('wsi-user-records');
     const storedPermissions = localStorage.getItem('wsi-user-permissions');
@@ -200,7 +208,7 @@ export default function Dashboard() {
         <button type="button" onClick={() => setCyberSecurityOpen(open => !open)} aria-expanded={cyberSecurityOpen} className="mb-2 mt-5 flex w-full items-center justify-between px-3 text-left text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]"><span>◈ Cyber Security <span className="ml-1 inline-block h-1 w-1 rounded-full bg-[var(--teal)]" /></span><ChevronDown size={13} className={`transition-transform ${cyberSecurityOpen ? '' : '-rotate-90'}`} /></button>
         {cyberSecurityOpen && nav.map((item, index) => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="sidebar-submenu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] transition"><span className="w-3 text-center">{index === 0 ? '⌂' : index === 1 ? '!' : '◇'}</span>{item}{item === 'Security Incidents' && incidents.filter(incident => incident.status !== 'Resolved').length > 0 && <b className="notification-count ml-auto rounded-full px-1.5 py-0.5 text-[9px]">{incidents.filter(incident => incident.status !== 'Resolved').length}</b>}</button>)}
         <button type="button" onClick={() => setItGovernanceOpen(open => !open)} aria-expanded={itGovernanceOpen} className="mb-2 mt-4 flex w-full items-center justify-between border-t border-[var(--line)] px-3 pt-4 text-left text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]"><span>▤ IT Governance</span><ChevronDown size={13} className={`transition-transform ${itGovernanceOpen ? '' : '-rotate-90'}`} /></button>
-        {itGovernanceOpen && governanceNav.map((item, index) => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="sidebar-submenu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] transition"><span className="w-3 text-center">{index === 0 ? '⌂' : index === 1 ? '▤' : index < 5 ? '≡' : '✓'}</span>{item}</button>)}
+        {itGovernanceOpen && [...governanceNav, ...customFrameworkNames].map((item, index) => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="sidebar-submenu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] transition"><span className="w-3 text-center">{index === 0 ? '⌂' : index === 1 ? '▤' : index < 5 ? '≡' : '✓'}</span>{item}</button>)}
         <button type="button" onClick={() => setMisToolsOpen(open => !open)} aria-expanded={misToolsOpen} className="mb-2 mt-4 flex w-full items-center justify-between border-t border-[var(--line)] px-3 pt-4 text-left text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]"><span>▣ MIS Tools</span><ChevronDown size={13} className={`transition-transform ${misToolsOpen ? '' : '-rotate-90'}`} /></button>
         {misToolsOpen && misToolsNav.map(item => <button key={item} data-active={active === item ? 'true' : 'false'} onClick={() => { navigateTo(item); setMobileOpen(false); }} className="sidebar-submenu-item mb-1 flex w-full items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] transition"><span className="w-3 text-center">{item === 'MIS Dashboard' ? '⌂' : item === 'Daily Report' ? '✎' : item === 'Inventory' ? '▦' : item === 'Email Management' ? '✉' : '▤'}</span>{item}</button>)}
         <div className="sidebar-bottom">{canAccessSettings && <button type="button" onClick={() => setSettingsOpen(true)} className="sidebar-settings flex items-center gap-3 rounded-md px-3 py-2 text-left text-[11px] text-white transition hover:bg-white/20"><span className="w-3 text-center">⚙</span>Settings</button>}<div className="sidebar-footer border-t border-[var(--line)] pt-4 text-[10px] text-[#617477]"><strong className="block text-[#b6c7c7]">Cyber Security Department</strong>Protected workspace</div></div>
@@ -217,7 +225,7 @@ export default function Dashboard() {
           <div className="mb-7 flex flex-col justify-between gap-5 sm:flex-row sm:items-end"><div><div className="mb-2 text-[10px] font-bold uppercase tracking-[1.7px] text-[var(--teal)]">WSI SECURITY MANAGEMENT INFORMATION SYSTEM</div><h1 className="font-display text-3xl font-semibold tracking-tight">{isDashboard ? 'Security overview' : active}</h1><p className="mt-2 text-xs text-[var(--muted)]">{isDashboard ? 'Executive visibility across your security posture, operations, and compliance.' : `Operational workspace for ${active.toLowerCase()}.`}</p></div>{showExportReport && <div className="flex gap-2"><button onClick={() => notify('Report export queued.')} className="flex items-center gap-2 rounded-md border border-[var(--line)] px-3 py-2 text-[11px] text-[var(--ink)]"><Download size={14} /> Export report</button></div>}</div>
           {showSecurityOverview && <div className="mb-5 flex items-center justify-between rounded-lg border border-[var(--teal)] bg-[var(--muted-surface)] p-4"><div className="flex items-center gap-3"><span className="h-2 w-2 rounded-full bg-[var(--teal)] shadow-[0_0_0_4px_var(--muted-surface)]" /><div><strong className="block text-xs text-[var(--accent-ink)]">Security status: Normal</strong><span className="text-[10px] opacity-70">Last assessed 11 Sep 2026, 09:42 AM</span></div></div><div className="hidden gap-4 text-[10px] opacity-70 sm:flex">Monitoring <b>24/7</b><span className="border-l border-current" />Next review <b>18 Sep</b></div></div>}
           {showSecurityOverview && <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{metrics.map(([label, value, trend, color]) => <article key={label} className="panel relative overflow-hidden p-4"><div className="flex justify-between text-[11px] text-[#8ca2a4]"><span>{label}</span><span className={`rounded-md px-2 py-1 ${color === 'mint' ? 'bg-[var(--muted-surface)] text-[var(--teal)]' : color === 'amber' ? 'bg-[#493b26] text-[var(--amber)]' : 'bg-[#492b33] text-[var(--coral)]'}`}>◆</span></div><strong className="mt-3 block font-display text-3xl">{value}</strong><div className="mt-1 text-[10px] text-[var(--teal)]">{trend} <span className="text-[#617477]">vs last month</span></div><div className="mt-4 h-1 rounded bg-[#18353b]"><i className="block h-full w-4/5 rounded bg-[var(--teal)]" /></div></article>)}</div>}
-          <div key={active} className="workspace-content-enter">{active === 'Dashboard' ? <WorkspaceDashboard notify={notify} onNavigate={navigateTo} onAddUser={() => navigateTo('User Management')} onUploadDocument={() => navigateTo('Document Library')} onBuildReport={() => navigateTo('Reports')} /> : active === 'User Management' ?<UserManagement users={userRecords} currentUser={currentUserRecord} savedPermissions={savedPermissions} onSettingsPermission={(user, allowed) => { const nextPermissions = { ...savedPermissions, [user.name]: { ...(savedPermissions[user.name] || {}), Settings: allowed } }; setSavedPermissions(nextPermissions); api.patch('/api/users', { email: user.email, permissions: nextPermissions[user.name] }).catch(() => notify('Could not save permission to the database.')); notify(allowed ? `Settings access granted to ${user.name}.` : `Settings access revoked for ${user.name}.`); }} onEditProfile={setProfileUser} onReviewAccess={setAccessUser} onAddUser={newUser => { const nextUsers = [newUser, ...userRecords]; setUserRecords(nextUsers); api.post('/api/users', newUser).catch(() => notify('Could not save user to the database.')); notify(`${newUser.name} was successfully invited and added.`); }} onDeleteUser={user => { const nextUsers = userRecords.filter(record => record.name !== user.name); setUserRecords(nextUsers); api.del('/api/users', { email: user.email }).catch(() => notify('Could not delete user from the database.')); setProfileUser(null); notify(`${user.name}'s account was deleted.`); }} /> : active === 'Company Management' ? <CompanyManagement notify={notify} /> : active === 'Server Management' ? <ServerManagementWithLogs notify={notify} /> : active === 'Network Management' ? <NetworkManagementWithTabs notify={notify} /> : active === 'MIS Dashboard' ? <MisDashboard notify={notify} onNavigate={navigateTo} /> : active === 'Daily Report' ? <DailyReport notify={notify} /> : active === 'Inventory' ? <InventoryManagement notify={notify} /> : active === 'Email Management' ? <EmailManagement notify={notify} /> : active === 'Reports' ? <ReportsManagement notify={notify} /> : active === 'Document Library' ? <DocumentLibrary notify={notify} /> : active === 'Governance Dashboard' ? <GovernanceDashboard notify={notify} onNavigate={navigateTo} /> : active === 'VAPT Management' ? <VaptManagement notify={notify} /> : active === 'Security Incidents' ? <SecurityIncidents incidents={incidents} notify={notify} onUpdate={saveIncidents} onLogIncident={() => setModal(true)} /> : active === 'Backup Management' ? <BackupManagement notify={notify} /> : !isDashboard && !['Dashboard', 'User Management', 'Company Management', 'Server Management', 'Network Management'].includes(active) ? <ModuleContent module={active} notify={notify} /> : !isDashboard ? <div className="panel flex min-h-[360px] flex-col items-center justify-center text-center"><ShieldCheck size={42} className="mb-4 text-[var(--teal)]" /><h2 className="font-display text-xl">{active}</h2><p className="mt-2 max-w-md text-xs text-[var(--muted)]">This Phase 1 workspace is ready for live Prisma records and role-scoped operations.</p></div> : <DashboardPanels onNavigate={navigateTo} activity={activity} />}</div>
+          <div key={active} className="workspace-content-enter">{active === 'Dashboard' ? <WorkspaceDashboard notify={notify} onNavigate={navigateTo} onAddUser={() => navigateTo('User Management')} onUploadDocument={() => navigateTo('Document Library')} onBuildReport={() => navigateTo('Reports')} /> : active === 'User Management' ?<UserManagement users={userRecords} currentUser={currentUserRecord} savedPermissions={savedPermissions} onSettingsPermission={(user, allowed) => { const nextPermissions = { ...savedPermissions, [user.name]: { ...(savedPermissions[user.name] || {}), Settings: allowed } }; setSavedPermissions(nextPermissions); api.patch('/api/users', { email: user.email, permissions: nextPermissions[user.name] }).catch(() => notify('Could not save permission to the database.')); notify(allowed ? `Settings access granted to ${user.name}.` : `Settings access revoked for ${user.name}.`); }} onEditProfile={setProfileUser} onReviewAccess={setAccessUser} onAddUser={newUser => { const nextUsers = [newUser, ...userRecords]; setUserRecords(nextUsers); api.post('/api/users', newUser).catch(() => notify('Could not save user to the database.')); notify(`${newUser.name} was successfully invited and added.`); }} onDeleteUser={user => { const nextUsers = userRecords.filter(record => record.name !== user.name); setUserRecords(nextUsers); api.del('/api/users', { email: user.email }).catch(() => notify('Could not delete user from the database.')); setProfileUser(null); notify(`${user.name}'s account was deleted.`); }} /> : active === 'Company Management' ? <CompanyManagement notify={notify} /> : active === 'Server Management' ? <ServerManagementWithLogs notify={notify} /> : active === 'Network Management' ? <NetworkManagementWithTabs notify={notify} /> : active === 'MIS Dashboard' ? <MisDashboard notify={notify} onNavigate={navigateTo} /> : active === 'Daily Report' ? <DailyReport notify={notify} /> : active === 'Inventory' ? <InventoryManagement notify={notify} /> : active === 'Email Management' ? <EmailManagement notify={notify} /> : active === 'Reports' ? <ReportsManagement notify={notify} /> : active === 'Document Library' ? <DocumentLibrary notify={notify} /> : active === 'Governance Dashboard' ? <GovernanceDashboard notify={notify} onNavigate={navigateTo} /> : active === 'Audit Logs' ? <AuditLogs /> : active === 'VAPT Management' ? <VaptManagement notify={notify} /> : active === 'Security Incidents' ? <SecurityIncidents incidents={incidents} notify={notify} onUpdate={saveIncidents} onLogIncident={() => setModal(true)} /> : active === 'Backup Management' ? <BackupManagement notify={notify} /> : !isDashboard && !['Dashboard', 'User Management', 'Company Management', 'Server Management', 'Network Management'].includes(active) ? <ModuleContent module={active} notify={notify} /> : !isDashboard ? <div className="panel flex min-h-[360px] flex-col items-center justify-center text-center"><ShieldCheck size={42} className="mb-4 text-[var(--teal)]" /><h2 className="font-display text-xl">{active}</h2><p className="mt-2 max-w-md text-xs text-[var(--muted)]">This Phase 1 workspace is ready for live Prisma records and role-scoped operations.</p></div> : <DashboardPanels onNavigate={navigateTo} activity={activity} />}</div>
         </div>
       </section>
 
@@ -2236,6 +2244,7 @@ function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) =>
   const [openFindings, setOpenFindings] = useState(0);
   const [frameworks, setFrameworks] = useState<Array<{ id: number; name: string; readinessPercent: number; nextReviewDate?: string | null }>>([]);
   const [showFrameworkForm, setShowFrameworkForm] = useState(false);
+  const [frameworkError, setFrameworkError] = useState('');
   useEffect(() => {
     let cancelled = false;
     const refresh = async () => {
@@ -2257,11 +2266,13 @@ function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) =>
     return () => { cancelled = true; window.removeEventListener('wsi-documents-changed', refresh); };
   }, []);
   const compliance = computeCompliance(documents);
-  const frameworkRows = frameworks.length ? frameworks : [
+  const builtInFrameworks = [
     { id: 1, name: 'SOC 2', readinessPercent: compliance.frameworks['SOC 2'] },
     { id: 2, name: 'ISO 27001', readinessPercent: compliance.frameworks['ISO 27001'] },
     { id: 3, name: 'DPA', readinessPercent: compliance.frameworks['DPA'] },
   ];
+  const frameworkRows = [...builtInFrameworks.filter(item => !frameworks.some(framework => framework.name === item.name)), ...frameworks];
+  const overallReadiness = frameworkRows.length ? Math.round(frameworkRows.reduce((sum, framework) => sum + framework.readinessPercent, 0) / frameworkRows.length) : 0;
   const findings = [
     { title: 'Update access review evidence for Q3', module: 'Audit & Findings', severity: 'High', due: 'Sep 20' },
     { title: 'Refresh data retention policy acknowledgment', module: 'Security Policies', severity: 'Medium', due: 'Sep 25' },
@@ -2275,7 +2286,7 @@ function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) =>
     ['Security Awareness', 'Manage training and awareness campaigns.'],
   ];
   const approvedDocs = documents.filter(doc => doc.status === 'Approved').length;
-  const complianceState = compliance.overall >= 90 ? 'Compliant' : compliance.overall >= 70 ? 'Partially compliant' : 'Attention needed';
+  const complianceState = overallReadiness >= 90 ? 'Compliant' : overallReadiness >= 70 ? 'Partially compliant' : 'Attention needed';
   function exportEvidence() {
     if (!documents.length) { notify('No evidence documents are available to export.'); return; }
     const exportedAt = new Date().toISOString();
@@ -2297,7 +2308,7 @@ function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) =>
     const escapeHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
     const frameworkTable = frameworkRows.map(framework => `<tr><td>${escapeHtml(framework.name)}</td><td>${framework.readinessPercent}%</td><td>${framework.readinessPercent === 0 ? 'No matching evidence' : framework.readinessPercent >= 90 ? 'Ready' : 'Evidence completion required'}</td></tr>`).join('');
     const evidenceTable = documents.map(document => `<tr><td>${escapeHtml(document.name)}</td><td>${escapeHtml(document.framework)}</td><td>${escapeHtml(document.category)}</td><td>${escapeHtml(document.status)}</td><td>${escapeHtml(document.uploadedAt)}</td></tr>`).join('');
-    popup.document.write(`<html><head><title>Governance Evidence Report</title><style>body{font-family:Arial,sans-serif;color:#172b35;padding:32px}h1{margin:0 0 6px}h2{margin-top:28px;font-size:18px}p{color:#52656b;font-size:12px}table{border-collapse:collapse;width:100%;font-size:11px;margin-top:10px}th,td{border:1px solid #cbd8dc;padding:8px;text-align:left}th{background:#eaf2f3}.score{font-size:24px;font-weight:bold;color:#167f70}.footer{margin-top:30px;font-size:10px;color:#687a80}@media print{button{display:none}}</style></head><body><h1>IT Governance Evidence Report</h1><p>Generated ${escapeHtml(new Date().toLocaleString())}</p><div class="score">Overall readiness: ${compliance.overall}%</div><h2>Certification readiness</h2><table><thead><tr><th>Certification</th><th>Readiness</th><th>Assessment</th></tr></thead><tbody>${frameworkTable}</tbody></table><h2>Evidence documents</h2><table><thead><tr><th>Document</th><th>Framework</th><th>Category</th><th>Status</th><th>Uploaded</th></tr></thead><tbody>${evidenceTable}</tbody></table><p class="footer">Readiness is calculated from the current database evidence: Approved 100%, Under review 60%, Draft 30%. A certification with no matching evidence is 0%.</p><script>window.onload=function(){window.print()}</script></body></html>`);
+    popup.document.write(`<html><head><title>Governance Evidence Report</title><style>body{font-family:Arial,sans-serif;color:#172b35;padding:32px}h1{margin:0 0 6px}h2{margin-top:28px;font-size:18px}p{color:#52656b;font-size:12px}table{border-collapse:collapse;width:100%;font-size:11px;margin-top:10px}th,td{border:1px solid #cbd8dc;padding:8px;text-align:left}th{background:#eaf2f3}.score{font-size:24px;font-weight:bold;color:#167f70}.footer{margin-top:30px;font-size:10px;color:#687a80}@media print{button{display:none}}</style></head><body><h1>IT Governance Evidence Report</h1><p>Generated ${escapeHtml(new Date().toLocaleString())}</p><div class="score">Overall readiness: ${overallReadiness}%</div><h2>Certification readiness</h2><table><thead><tr><th>Certification</th><th>Readiness</th><th>Assessment</th></tr></thead><tbody>${frameworkTable}</tbody></table><h2>Evidence documents</h2><table><thead><tr><th>Document</th><th>Framework</th><th>Category</th><th>Status</th><th>Uploaded</th></tr></thead><tbody>${evidenceTable}</tbody></table><p class="footer">Readiness is calculated from the current database evidence: Approved 100%, Under review 60%, Draft 30%. A certification with no matching evidence is 0%.</p><script>window.onload=function(){window.print()}</script></body></html>`);
     popup.document.close();
   }
 
@@ -2310,14 +2321,14 @@ function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) =>
             <h2 className="font-display text-xl">Governance Dashboard</h2>
             <p className="mt-2 max-w-2xl text-xs text-[var(--muted)]">Compliance posture, policy health, and audit readiness at a glance — computed live from the document library.</p>
           </div>
-          <span className={`rounded-full px-3 py-1.5 text-[10px] font-bold ${compliance.overall >= 90 ? 'badge-green' : compliance.overall >= 70 ? 'badge-amber' : 'badge-red'}`}>{complianceState}</span>
+          <span className={`rounded-full px-3 py-1.5 text-[10px] font-bold ${overallReadiness >= 90 ? 'badge-green' : overallReadiness >= 70 ? 'badge-amber' : 'badge-red'}`}>{complianceState}</span>
         </div>
       </section>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <WorkspaceMetric label="Library documents" value={String(documents.length)} detail={`${approvedDocs} approved`} accent="var(--teal)" />
         <WorkspaceMetric label="Approved docs" value={String(approvedDocs)} detail="Ready as evidence" accent="var(--blue)" />
-        <WorkspaceMetric label="Avg. compliance" value={`${compliance.overall}%`} detail="Across 3 frameworks" accent="var(--teal)" />
+        <WorkspaceMetric label="Avg. compliance" value={`${overallReadiness}%`} detail={`Across ${frameworkRows.length} frameworks`} accent="var(--teal)" />
         <WorkspaceMetric label="Open findings" value={String(openFindings)} detail="From audit records" accent="var(--amber)" />
       </div>
 
@@ -2341,12 +2352,12 @@ function GovernanceDashboard({ notify, onNavigate }: { notify: (text: string) =>
                 <div className="mt-2 h-2 rounded bg-[var(--highlight)]"><i className={`block h-full rounded ${framework.readinessPercent >= 90 ? 'bg-[var(--teal)]' : framework.readinessPercent >= 70 ? 'bg-[var(--amber)]' : 'bg-[var(--coral)]'}`} style={{ width: `${framework.readinessPercent}%` }} /></div>
                 <p className="mt-1 text-[10px] text-[var(--muted)]">Readiness from approved, reviewed, and draft evidence.</p>
               </button>
-              {frameworks.length > 0 && <button onClick={async () => { try { await fetch(`/api/compliance-frameworks?id=${framework.id}`, { method: 'DELETE' }); setFrameworks(current => current.filter(item => item.id !== framework.id)); notify(`${framework.name} removed.`); } catch { notify('Could not remove certification framework.'); } }} className="mt-1 hidden text-[10px] text-[var(--coral)] group-hover:block">Remove certification</button>}
+              {frameworks.length > 0 && <button onClick={async () => { try { await fetch(`/api/compliance-frameworks?id=${framework.id}`, { method: 'DELETE' }); setFrameworks(current => current.filter(item => item.id !== framework.id)); window.dispatchEvent(new Event('wsi-frameworks-changed')); notify(`${framework.name} removed.`); } catch { notify('Could not remove certification framework.'); } }} className="mt-1 hidden text-[10px] text-[var(--coral)] group-hover:block">Remove certification</button>}
             </div>
             ))}
           </div>
         </section>
-        {showFrameworkForm && <div className="fixed inset-0 z-40 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={async event => { event.preventDefault(); const form = new FormData(event.currentTarget); const name = String(form.get('name') || '').trim(); if (!name) { notify('Certification name is required.'); return; } try { const created = await api.post<{ id: number; name: string; readinessPercent: number }>('/api/compliance-frameworks', { name, readinessPercent: Number(form.get('readinessPercent') || 0), nextReviewDate: form.get('nextReviewDate') || null }); setFrameworks(current => [...current, created]); setShowFrameworkForm(false); notify(`${name} certification program added.`); } catch { notify('Could not add certification program.'); } }} className="w-full max-w-md rounded-lg border border-[var(--teal)] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><span className="text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]">IT Governance</span><h2 className="mt-1 font-display text-lg">Add certification program</h2></div><button type="button" onClick={() => setShowFrameworkForm(false)}><X size={19} /></button></div><div className="grid gap-4"><label className="text-[11px] text-[var(--muted)]">Program name<input name="name" required placeholder="PCI DSS, NIST CSF..." className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Current readiness (%)<input name="readinessPercent" type="number" min="0" max="100" defaultValue="0" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Next review date<input name="nextReviewDate" type="date" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label></div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setShowFrameworkForm(false)} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Add program</button></div></form></div>}
+        {showFrameworkForm && <div className="fixed inset-0 z-40 grid place-items-center bg-[#031015cc] p-5"><form onSubmit={async event => { event.preventDefault(); setFrameworkError(''); const form = new FormData(event.currentTarget); const name = String(form.get('name') || '').trim(); if (!name) { setFrameworkError('Certification name is required.'); return; } try { const created = await api.post<{ id: number; name: string; readinessPercent: number }>('/api/compliance-frameworks', { name, nextReviewDate: form.get('nextReviewDate') || null }); setFrameworks(current => [...current.filter(item => item.id !== created.id), created]); window.dispatchEvent(new Event('wsi-frameworks-changed')); setShowFrameworkForm(false); notify(`${name} certification program added and published under IT Governance.`); } catch (error) { setFrameworkError(error instanceof Error ? error.message : 'Could not add certification program.'); } }} className="w-full max-w-md rounded-lg border border-[var(--teal)] bg-[var(--surface)] p-6 shadow-2xl"><div className="mb-5 flex items-center justify-between"><div><span className="text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]">IT Governance</span><h2 className="mt-1 font-display text-lg">Add certification program</h2></div><button type="button" onClick={() => setShowFrameworkForm(false)}><X size={19} /></button></div><div className="grid gap-4"><label className="text-[11px] text-[var(--muted)]">Program name<input name="name" required placeholder="PCI DSS, NIST CSF..." className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label><label className="text-[11px] text-[var(--muted)]">Next review date<input name="nextReviewDate" type="date" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm" /></label>{frameworkError && <p className="text-xs text-[var(--coral)]">{frameworkError}</p>}</div><div className="mt-6 flex justify-end gap-2"><button type="button" onClick={() => setShowFrameworkForm(false)} className="rounded border border-[var(--line)] px-3 py-2 text-xs">Cancel</button><button className="rounded bg-[var(--teal)] px-3 py-2 text-xs font-bold text-[var(--highlight-ink)]">Add program</button></div></form></div>}
 
         <section className="panel p-5">
           <div className="mb-5">
@@ -2907,6 +2918,13 @@ function ChatCenter({ users: userList, currentUser, notify, compact = false }: {
     setCallOpen(false);
   }
 
+  function openSharedVideoRoom() {
+    if (!room) return;
+    const roomKey = room.id.replace(/[^a-zA-Z0-9-]/g, '-');
+    window.open(`https://meet.jit.si/it-security-center-${roomKey}`, '_blank', 'noopener,noreferrer');
+    notify('Shared video room opened in a new tab.');
+  }
+
   const room = data.rooms.find(item => item.id === activeRoom);
   const messages = data.messages[activeRoom] || [];
   const roomUser = room && !room.isGroup ? userList.find(user => user.email === room.members.find(member => member !== currentUser.email)) : null;
@@ -3049,7 +3067,7 @@ function ChatCenter({ users: userList, currentUser, notify, compact = false }: {
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2 border-t border-[var(--line)] p-4">
+            <div className="flex justify-between gap-2 border-t border-[var(--line)] p-4"><button onClick={openSharedVideoRoom} className="rounded border border-[var(--teal)] px-4 py-2 text-xs font-bold text-[var(--teal)]">Open shared video room</button>
               <button onClick={endCall} className="rounded bg-[#9b4038] px-4 py-2 text-xs font-bold text-white">End call</button>
             </div>
           </div>
@@ -3304,6 +3322,7 @@ function ModuleContent({ module, notify }: { module: string; notify: (text: stri
   const data = content[module] || fallback;
   const [records, setRecords] = useState<GenericRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [editTarget, setEditTarget] = useState<GenericRecord | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<GenericRecord | null>(null);
   const [attachment, setAttachment] = useState<File | null>(null);
 
@@ -3340,11 +3359,19 @@ function ModuleContent({ module, notify }: { module: string; notify: (text: stri
     const title = String(form.get('title') || '').trim();
     if (!title) { notify('Record title is required.'); return; }
     readAttachment(attachment || undefined, file => {
-      const record: GenericRecord = { id: `${module}-${Date.now()}`, title, tag: String(form.get('tag') || 'Info'), meta: String(form.get('meta') || 'Just now'), detail: String(form.get('detail') || '').trim(), createdAt: new Date().toISOString(), attachmentName: file?.name, attachmentType: file?.type, attachmentData: file?.dataUrl };
-      persist([record, ...records], { created: record });
+      const record: GenericRecord = { id: editTarget?.id || `${module}-${Date.now()}`, title, tag: String(form.get('tag') || 'Info'), meta: String(form.get('meta') || 'Just now'), detail: String(form.get('detail') || '').trim(), createdAt: editTarget?.createdAt || new Date().toISOString(), attachmentName: file?.name || editTarget?.attachmentName, attachmentType: file?.type || editTarget?.attachmentType, attachmentData: file?.dataUrl || editTarget?.attachmentData };
+      if (editTarget) {
+        api.patch<{ approvalRequired?: boolean }>('/api/records', { ...record, reason: String(form.get('reason') || '').trim() }).then(result => {
+          if (result?.approvalRequired) notify('Edit submitted for Admin or Master Admin approval.');
+          else { setRecords(current => current.map(item => item.id === record.id ? record : item)); notify(`${module} record updated.`); }
+        }).catch(() => notify('Could not submit the record edit.'));
+      } else {
+        persist([record, ...records], { created: record });
+        notify(`${module} record added.`);
+      }
       setShowForm(false);
+      setEditTarget(null);
       setAttachment(null);
-      notify(`${module} record added.`);
     });
   }
 
@@ -3390,6 +3417,7 @@ function ModuleContent({ module, notify }: { module: string; notify: (text: stri
                 )}
               </div>
               <span className={`rounded-full px-2.5 py-1 text-[10px] font-medium ${['High', 'Critical', 'Exception', 'Open', 'Expired', 'Warning', 'Action required', 'Failed'].includes(record.tag) ? 'badge-red' : ['Medium', 'In progress', 'Running', 'Scheduled', 'Mitigating', 'Treating', 'Remediating', 'Monitoring', 'Under review', 'Info'].includes(record.tag) ? 'badge-blue' : 'badge-green'}`}>{record.tag}</span>
+              <button onClick={() => { setEditTarget(record); setShowForm(true); }} className="rounded border border-[var(--line)] px-2.5 py-1 text-[10px] font-medium text-[var(--ink)] hover:border-[var(--teal)]">Edit</button>
               <button onClick={() => setDeleteTarget(record)} className="rounded border border-[#9b4038] bg-[#492b33] px-2.5 py-1 text-[10px] font-medium text-white hover:bg-[#9b4038]">Delete</button>
             </div>
           ))}
@@ -3402,30 +3430,31 @@ function ModuleContent({ module, notify }: { module: string; notify: (text: stri
             <div className="mb-5 flex items-center justify-between border-b border-[var(--line)] pb-4">
               <div>
                 <span className="text-[10px] font-bold uppercase tracking-[1.4px] text-[var(--teal)]">{module}</span>
-                <h2 className="mt-1 font-display text-lg">Add record</h2>
+                <h2 className="mt-1 font-display text-lg">{editTarget ? 'Edit record' : 'Add record'}</h2>
               </div>
               <button type="button" onClick={() => setShowForm(false)} className="rounded p-1 text-[var(--muted)] hover:text-white"><X size={19} /></button>
             </div>
             <div className="grid gap-4">
               <label className="text-[11px] text-[#8ca2a4]">Title <span className="text-[var(--teal)]">*</span>
-                <input name="title" required placeholder="Record title" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none" />
+                <input name="title" required defaultValue={editTarget?.title} placeholder="Record title" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none" />
               </label>
               <label className="text-[11px] text-[#8ca2a4]">Status / tag
-                <select name="tag" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none">
+                <select name="tag" defaultValue={editTarget?.tag || 'Info'} className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none">
                   {['Info', 'Open', 'In progress', 'Scheduled', 'Monitoring', 'Under review', 'Passed', 'Healthy', 'Medium', 'High', 'Critical', 'Warning', 'Failed', 'Complete', 'Current'].map(tag => <option key={tag}>{tag}</option>)}
                 </select>
               </label>
               <label className="text-[11px] text-[#8ca2a4]">Meta / date label
-                <input name="meta" placeholder="e.g. Due Sep 30" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none" />
+                <input name="meta" defaultValue={editTarget?.meta} placeholder="e.g. Due Sep 30" className="mt-1 w-full rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none" />
               </label>
               <label className="text-[11px] text-[#8ca2a4]">Details
-                <textarea name="detail" rows={3} placeholder="Optional details" className="mt-1 w-full resize-none rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none" />
+                <textarea name="detail" rows={3} defaultValue={editTarget?.detail} placeholder="Optional details" className="mt-1 w-full resize-none rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none" />
               </label>
+              {editTarget && <label className="text-[11px] text-[#8ca2a4]">Reason for edit <span className="text-[var(--teal)]">*</span><textarea name="reason" required minLength={5} rows={2} placeholder="Explain what is changing and why" className="mt-1 w-full resize-none rounded border border-[var(--line)] bg-[var(--canvas)] p-2.5 text-sm text-white focus:border-[var(--teal)] outline-none" /></label>}
               <AttachmentInput file={attachment} setFile={setAttachment} />
             </div>
             <div className="mt-6 flex justify-end gap-2 border-t border-[var(--line)] pt-4">
-              <button type="button" onClick={() => { setShowForm(false); setAttachment(null); }} className="rounded border border-[var(--line)] px-4 py-2 text-xs text-[var(--ink)]">Cancel</button>
-              <button type="submit" className="rounded bg-[var(--teal)] px-4 py-2 text-xs font-bold text-[var(--highlight-ink)]">Add record</button>
+              <button type="button" onClick={() => { setShowForm(false); setEditTarget(null); setAttachment(null); }} className="rounded border border-[var(--line)] px-4 py-2 text-xs text-[var(--ink)]">Cancel</button>
+              <button type="submit" className="rounded bg-[var(--teal)] px-4 py-2 text-xs font-bold text-[var(--highlight-ink)]">{editTarget ? 'Submit edit' : 'Add record'}</button>
             </div>
           </form>
         </div>
@@ -4531,16 +4560,31 @@ function SearchOverlay({ term, setTerm, users: userList, onNavigate, onClose }: 
 function SearchGroup({ title, children }: { title: string; children: React.ReactNode }) { return <section><h3 className="px-2 pb-1 text-[10px] font-bold uppercase tracking-[1.3px] text-[var(--teal)]">{title}</h3><div className="divide-y divide-[var(--line)]">{children}</div></section>; }
 
 function DashboardPanels({ onNavigate, activity }: { onNavigate: (name: string) => void; activity: Array<[string, number, string]> }) {
+  const [snapshot, setSnapshot] = useState<{
+    openIncidents: number;
+    vulnerabilities: Array<{ severity: string; _count: { _all: number } }>;
+    risks: Array<{ rating: string; _count: { _all: number } }>;
+    assets: number;
+    frameworks: Array<{ name: string; readinessPercent: number }>;
+  } | null>(null);
+  useEffect(() => {
+    api.get<typeof snapshot>('/api/dashboard').then(setSnapshot).catch(() => {});
+  }, []);
   const barHeights = [63, 80, 48, 69];
-  const riskRows: Array<[string, number, string, string]> = [['Critical', 18, '#ed6b73', '04'], ['High', 38, '#ef855b', '09'], ['Medium', 70, '#f5b55e', '17'], ['Low', 46, '#4f8b93', '11']];
+  const vulnerabilityTotal = snapshot?.vulnerabilities.reduce((sum, row) => sum + row._count._all, 0) || 0;
+  const riskTotal = snapshot?.risks.reduce((sum, row) => sum + row._count._all, 0) || 0;
+  const riskRows: Array<[string, number, string, string]> = ['Critical', 'High', 'Medium', 'Low'].map((label, index) => {
+    const count = snapshot?.risks.find(row => row.rating === label.toUpperCase())?._count._all || 0;
+    return [label, riskTotal ? Math.round((count / riskTotal) * 100) : [18, 38, 70, 46][index], ['#ed6b73', '#ef855b', '#f5b55e', '#4f8b93'][index], String(count || ['04', '09', '17', '11'][index])];
+  });
   return <div className="grid gap-3 xl:grid-cols-3">
-    <article className="panel p-5 xl:col-span-2"><Header title="Security incidents" subtitle="Incident volume by current status" action="Last 30 days" /><div className="grid h-48 grid-cols-4 items-end gap-5 border-b border-[var(--line)] bg-[linear-gradient(to_bottom,transparent_0%,transparent_24%,#17343b_25%,transparent_26%,transparent_49%,#17343b_50%,transparent_51%,transparent_74%,#17343b_75%,transparent_76%)] px-5">{barHeights.map((height, index) => <div key={index} className="flex h-full flex-col items-center justify-end gap-2"><div className="flex h-full items-end gap-1"><i className="w-3 rounded-t bg-[var(--teal)]" style={{ height: `${height}%` }} /><i className="w-3 rounded-t bg-[var(--blue)]" style={{ height: `${height - 25}%` }} /><i className="w-3 rounded-t bg-[#8d8af7]" style={{ height: `${height - 43}%` }} /></div><small className="text-[9px] text-[#617477]">{['Aug 18', 'Aug 25', 'Sep 01', 'Sep 08'][index]}</small></div>)}</div><div className="mt-4 flex flex-wrap items-center gap-4 text-[10px] text-[#8ca2a4]"><span>● Open <b className="text-white">04</b></span><span className="text-[var(--blue)]">● Investigating <b className="text-white">03</b></span><button onClick={() => onNavigate('Security Incidents')} className="ml-auto text-[var(--teal)]">View incidents →</button></div></article>
-    <article className="panel p-5"><Header title="Vulnerabilities" subtitle="Current findings by severity" /><div className="my-8 flex items-center gap-5"><div className="grid h-32 w-32 shrink-0 place-items-center rounded-full" style={{ background: 'conic-gradient(#ed6b73 0 9%,#ef855b 9% 20%,#f5b55e 20% 47%,#4f8b93 47% 100%)' }}><div className="grid h-20 w-20 place-items-center rounded-full bg-[var(--surface)]"><strong className="font-display text-xl">143</strong></div></div><div className="space-y-3 text-[10px] text-[#8ca2a4]"><p>● Critical <b className="text-white">03</b></p><p>● High <b className="text-white">04</b></p><p>● Medium <b className="text-white">38</b></p><p>● Low <b className="text-white">98</b></p></div></div><button onClick={() => onNavigate('Vulnerability Management')} className="text-[10px] text-[var(--teal)]">View vulnerability register →</button></article>
-    <article className="panel p-5"><Header title="Compliance posture" subtitle="Framework readiness score" /><div className="my-7 flex justify-around">{[['SOC 2', '96%', 'var(--teal)'], ['ISO 27001', '93%', 'var(--blue)'], ['DPA', '89%', 'var(--amber)']].map(([name, value, color]) => <div key={name} className="text-center"><div className="grid h-20 w-20 place-items-center rounded-full border-4 border-[#1d3b42]" style={{ borderTopColor: color }}><strong className="font-display text-lg">{value}</strong></div><small className="mt-2 block text-[9px] text-[#617477]">{name}</small></div>)}</div><div className="border-t border-[var(--line)] pt-3 text-[10px] text-[#617477]">● <span className="text-[var(--teal)]">On track</span><span className="float-right">Next evidence review <b className="text-white">14 days</b></span></div></article>
-    <article className="panel p-5 xl:col-span-2"><Header title="Risk register" subtitle="Risk distribution by rating" action="This quarter" /><div className="space-y-4 py-4">{riskRows.map(([label, width, color, total]) => <div key={label} className="grid grid-cols-[60px_1fr_24px] items-center gap-3 text-[10px] text-[#8ca2a4]"><span>{label}</span><div className="h-2 rounded bg-[#1b363c]"><i className="block h-full rounded" style={{ width: `${width}%`, background: color }} /></div><b className="text-right text-white">{total}</b></div>)}</div><div className="border-t border-[var(--line)] pt-3 text-[10px] text-[#617477]"><strong className="font-display text-xl text-white">41</strong> total registered risks<button onClick={() => onNavigate('Risk Management')} className="float-right text-[var(--teal)]">Open register →</button></div></article>
+    <article className="panel p-5 xl:col-span-2"><Header title="Security incidents" subtitle="Incident volume by current status" action="Live database snapshot" /><div className="grid h-48 grid-cols-4 items-end gap-5 border-b border-[var(--line)] bg-[linear-gradient(to_bottom,transparent_0%,transparent_24%,#17343b_25%,transparent_26%,transparent_49%,#17343b_50%,transparent_51%,transparent_74%,#17343b_75%,transparent_76%)] px-5">{barHeights.map((height, index) => <div key={index} className="flex h-full flex-col items-center justify-end gap-2"><div className="flex h-full items-end gap-1"><i className="w-3 rounded-t bg-[var(--teal)]" style={{ height: `${height}%` }} /><i className="w-3 rounded-t bg-[var(--blue)]" style={{ height: `${height - 25}%` }} /><i className="w-3 rounded-t bg-[#8d8af7]" style={{ height: `${height - 43}%` }} /></div><small className="text-[9px] text-[#617477]">{['Aug 18', 'Aug 25', 'Sep 01', 'Sep 08'][index]}</small></div>)}</div><div className="mt-4 flex flex-wrap items-center gap-4 text-[10px] text-[#8ca2a4]"><span>● Open <b className="text-white">{snapshot?.openIncidents ?? 4}</b></span><button onClick={() => onNavigate('Security Incidents')} className="ml-auto text-[var(--teal)]">View incidents →</button></div></article>
+    <article className="panel p-5"><Header title="Vulnerabilities" subtitle="Current findings by severity" /><div className="my-8 flex items-center gap-5"><div className="grid h-32 w-32 shrink-0 place-items-center rounded-full" style={{ background: 'conic-gradient(#ed6b73 0 9%,#ef855b 9% 20%,#f5b55e 20% 47%,#4f8b93 47% 100%)' }}><div className="grid h-20 w-20 place-items-center rounded-full bg-[var(--surface)]"><strong className="font-display text-xl">{vulnerabilityTotal || 143}</strong></div></div><div className="space-y-3 text-[10px] text-[#8ca2a4]">{['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].map(severity => <p key={severity}>● {severity[0] + severity.slice(1).toLowerCase()} <b className="text-white">{snapshot?.vulnerabilities.find(row => row.severity === severity)?._count._all || 0}</b></p>)}</div></div><button onClick={() => onNavigate('Vulnerability Management')} className="text-[10px] text-[var(--teal)]">View vulnerability register →</button></article>
+    <article className="panel p-5"><Header title="Compliance posture" subtitle="Framework readiness score" /><div className="my-7 flex justify-around">{(snapshot?.frameworks.length ? snapshot.frameworks : [{ name: 'SOC 2', readinessPercent: 96 }, { name: 'ISO 27001', readinessPercent: 93 }, { name: 'DPA', readinessPercent: 89 }]).slice(0, 4).map((framework, index) => <div key={framework.name} className="text-center"><div className="grid h-20 w-20 place-items-center rounded-full border-4 border-[#1d3b42]" style={{ borderTopColor: ['var(--teal)', 'var(--blue)', 'var(--amber)', '#8d8af7'][index] }}><strong className="font-display text-lg">{framework.readinessPercent}%</strong></div><small className="mt-2 block text-[9px] text-[#617477]">{framework.name}</small></div>)}</div><div className="border-t border-[var(--line)] pt-3 text-[10px] text-[#617477]">● <span className="text-[var(--teal)]">On track</span><span className="float-right">Live readiness from evidence</span></div></article>
+    <article className="panel p-5 xl:col-span-2"><Header title="Risk register" subtitle="Risk distribution by rating" action="Live database snapshot" /><div className="space-y-4 py-4">{riskRows.map(([label, width, color, total]) => <div key={label} className="grid grid-cols-[60px_1fr_24px] items-center gap-3 text-[10px] text-[#8ca2a4]"><span>{label}</span><div className="h-2 rounded bg-[#1b363c]"><i className="block h-full rounded" style={{ width: `${width}%`, background: color }} /></div><b className="text-right text-white">{total}</b></div>)}</div><div className="border-t border-[var(--line)] pt-3 text-[10px] text-[#617477]"><strong className="font-display text-xl text-white">{riskTotal || 41}</strong> total registered risks<button onClick={() => onNavigate('Risk Management')} className="float-right text-[var(--teal)]">Open register →</button></div></article>
     <article className="panel p-5"><Header title="Security activities" subtitle="Department completion" action="September" />{activity.map(([name, value, color]) => <div key={name} className="my-4"><div className="mb-2 flex justify-between text-[10px] text-[#a9bdbc]"><span>{name}</span><b>{value}%</b></div><div className="h-2 rounded bg-[#1b363c]"><i className={`block h-full rounded ${color === 'mint' ? 'bg-[var(--teal)]' : color === 'blue' ? 'bg-[var(--blue)]' : color === 'amber' ? 'bg-[var(--amber)]' : 'bg-[#bf8df5]'}`} style={{ width: `${value}%` }} /></div></div>)}</article>
     <article className="panel p-5 xl:col-span-2"><Header title="Attention required" subtitle="Items needing ownership this week" action="5 open" /><div className="space-y-3">{['Critical vulnerability remediation', 'Quarterly access review', 'Restore test evidence'].map((item, index) => <div key={item} className="flex items-center gap-3 border-b border-[#163239] pb-3 text-xs"><span className={`h-2 w-2 rounded-full ${index === 0 ? 'bg-[var(--coral)]' : index === 1 ? 'bg-[#ef855b]' : 'bg-[var(--amber)]'}`} /><div><strong className="block font-normal">{item}</strong><span className="text-[10px] text-[#617477]">{['Payment gateway · Due today', 'Finance department · Due Sep 13', 'Backup cluster B · Due Sep 15'][index]}</span></div><b className="ml-auto grid h-7 w-7 place-items-center rounded-full bg-[#22434a] text-[9px] text-[#9cd5ca]">{['TS', 'MA', 'RL'][index]}</b></div>)}</div><button onClick={() => onNavigate('Audit & Findings')} className="mt-4 text-[10px] text-[var(--teal)]">View all actions →</button></article>
-    <article className="panel p-5"><Header title="Protected IT assets" subtitle="Coverage and health snapshot" /><div className="my-7 flex items-center justify-between"><div><strong className="font-display text-4xl">486</strong><span className="block text-[10px] text-[#617477]">registered assets</span></div><div className="text-center"><div className="grid h-16 w-16 place-items-center rounded-full border-4 border-[#1c4547] border-t-[var(--teal)]"><strong className="font-display">97%</strong></div><span className="text-[10px] text-[#617477]">protected</span></div></div><button onClick={() => onNavigate('Security Assets')} className="text-[10px] text-[var(--teal)]">Manage assets →</button></article>
+    <article className="panel p-5"><Header title="Protected IT assets" subtitle="Coverage and health snapshot" /><div className="my-7 flex items-center justify-between"><div><strong className="font-display text-4xl">{snapshot?.assets || 486}</strong><span className="block text-[10px] text-[#617477]">registered assets</span></div><div className="text-center"><div className="grid h-16 w-16 place-items-center rounded-full border-4 border-[#1c4547] border-t-[var(--teal)]"><strong className="font-display">97%</strong></div><span className="text-[10px] text-[#617477]">protected</span></div></div><button onClick={() => onNavigate('Security Assets')} className="text-[10px] text-[var(--teal)]">Manage assets →</button></article>
   </div>;
 }
 

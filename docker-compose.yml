@@ -1,15 +1,34 @@
 services:
-  mysql:
-    image: mysql:8.4
-    container_name: wsi-cyber-security-db
-    restart: unless-stopped
+  app:
+    build: .
+    ports:
+      - "${APP_PORT:-3000}:3000"
+    env_file:
+      - .env
     environment:
-      MYSQL_ROOT_PASSWORD: root-change-me
-      MYSQL_DATABASE: wsi_mis_security
-      MYSQL_USER: wsi_security
-      MYSQL_PASSWORD: change-me
-    ports: ["3306:3306"]
+      NODE_ENV: production
+      DATABASE_URL: mysql://security_center:${MYSQL_PASSWORD:-change-me}@db:3306/security_center
+      SESSION_COOKIE_SECURE: ${SESSION_COOKIE_SECURE:-false}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: security_center
+      MYSQL_USER: security_center
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-change-me}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-change-root-password}
     volumes:
-      - wsi_mysql_data:/var/lib/mysql
+      - security-center-db:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -u root -p$${MYSQL_ROOT_PASSWORD} --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+    restart: unless-stopped
+
 volumes:
-  wsi_mysql_data:
+  security-center-db:
