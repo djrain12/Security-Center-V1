@@ -6,6 +6,7 @@ import { getSessionFromRequest } from '@/lib/session';
 // GET returns full user directory with module permissions.
 export async function GET(request: Request) {
   const session = getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   const users = await prisma.user.findMany({ where: session?.accessLevel === 'SUPER_MASTER_ADMIN' ? undefined : { companyId: session?.companyId || -1 }, orderBy: { fullName: 'asc' }, include: { role: true, company: true, modulePermissions: true } });
   return NextResponse.json(users.map(user => ({
     id: user.id,
@@ -30,6 +31,7 @@ export async function GET(request: Request) {
 
 export async function POST(request: Request) {
   const session = getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   const body = await request.json();
   if (!body.name || !body.email) return NextResponse.json({ error: 'name and email are required.' }, { status: 400 });
   const roleName = String(body.role || 'IT User');
@@ -45,6 +47,7 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   const session = getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   const body = await request.json();
   if (!body.email) return NextResponse.json({ error: 'email is required.' }, { status: 400 });
   const user = await prisma.user.findUnique({ where: { email: String(body.email).toLowerCase() } });
@@ -65,12 +68,15 @@ export async function PATCH(request: Request) {
   let passwordHash: string | null | undefined;
   if (body.password) passwordHash = await bcrypt.hash(String(body.password), 10);
   else if (body.passwordConfigured === false) passwordHash = null;
-  const updated = await prisma.user.update({ where: { id: user.id }, data: { fullName: body.name ?? user.fullName, companyId: body.companyId === null ? null : body.companyId ? Number(body.companyId) : user.companyId, department: body.department ?? user.department, accessLevel: body.accessLevel ?? user.accessLevel, birthday: body.birthday ? new Date(body.birthday) : user.birthday, contactNumber: body.contactNumber ?? user.contactNumber, address: body.address ?? user.address, photoUrl: body.photoUrl ?? user.photoUrl, mfaEnabled: body.mfaEnabled ?? user.mfaEnabled, roleId, passwordHash } });
+  const requestedCompanyId = body.companyId === null ? null : body.companyId ? Number(body.companyId) : user.companyId;
+  if (session.accessLevel !== 'SUPER_MASTER_ADMIN' && requestedCompanyId !== session.companyId) return NextResponse.json({ error: 'Only the Super Master Admin can move users between companies.' }, { status: 403 });
+  const updated = await prisma.user.update({ where: { id: user.id }, data: { fullName: body.name ?? user.fullName, companyId: requestedCompanyId, department: body.department ?? user.department, accessLevel: body.accessLevel ?? user.accessLevel, birthday: body.birthday ? new Date(body.birthday) : user.birthday, contactNumber: body.contactNumber ?? user.contactNumber, address: body.address ?? user.address, photoUrl: body.photoUrl ?? user.photoUrl, mfaEnabled: body.mfaEnabled ?? user.mfaEnabled, roleId, passwordHash } });
   return NextResponse.json({ id: updated.id });
 }
 
 export async function DELETE(request: Request) {
   const session = getSessionFromRequest(request);
+  if (!session) return NextResponse.json({ error: 'Authentication required.' }, { status: 401 });
   const body = await request.json();
   if (!body.email) return NextResponse.json({ error: 'email is required.' }, { status: 400 });
   const user = await prisma.user.findUnique({ where: { email: String(body.email).toLowerCase() } });
