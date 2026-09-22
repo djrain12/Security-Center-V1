@@ -24,8 +24,17 @@ export async function POST(request: Request) {
       const parsed = JSON.parse(body.payload) as { companyId?: number; documents?: Array<Record<string, unknown>>; frameworks?: Array<Record<string, unknown>> };
       if (parsed.companyId && parsed.companyId !== companyId) return NextResponse.json({ error: 'This backup belongs to a different company.' }, { status: 400 });
       if (parsed.documents) for (const document of parsed.documents) await prisma.libraryDocument.upsert({ where: { id: String(document.id) }, update: { companyId, name: String(document.name || ''), category: String(document.category || 'Policy'), framework: String(document.framework || 'General'), status: String(document.status || 'Draft'), size: String(document.size || '—'), uploadedAt: String(document.uploadedAt || ''), dataUrl: typeof document.dataUrl === 'string' ? document.dataUrl : null }, create: { id: String(document.id), companyId, name: String(document.name || ''), category: String(document.category || 'Policy'), framework: String(document.framework || 'General'), status: String(document.status || 'Draft'), size: String(document.size || '—'), uploadedAt: String(document.uploadedAt || ''), dataUrl: typeof document.dataUrl === 'string' ? document.dataUrl : null } });
-      return NextResponse.json({ loaded: true, documents: parsed.documents?.length || 0 });
+      if (parsed.frameworks) for (const framework of parsed.frameworks) await prisma.complianceFramework.upsert({ where: { companyId_name: { companyId, name: String(framework.name || '') } }, update: { readinessPercent: Number(framework.readinessPercent || 0), nextReviewDate: framework.nextReviewDate ? new Date(String(framework.nextReviewDate)) : null }, create: { companyId, name: String(framework.name || ''), readinessPercent: Number(framework.readinessPercent || 0), nextReviewDate: framework.nextReviewDate ? new Date(String(framework.nextReviewDate)) : null } });
+      return NextResponse.json({ loaded: true, documents: parsed.documents?.length || 0, frameworks: parsed.frameworks?.length || 0 });
     } catch { return NextResponse.json({ error: 'Invalid company backup file.' }, { status: 400 }); }
+  }
+  if (body.action === 'clean') {
+    const [documents, frameworks, backups] = await prisma.$transaction([
+      prisma.libraryDocument.deleteMany({ where: { companyId } }),
+      prisma.complianceFramework.deleteMany({ where: { companyId } }),
+      prisma.companyBackup.deleteMany({ where: { companyId } }),
+    ]);
+    return NextResponse.json({ cleaned: true, documents: documents.count, frameworks: frameworks.count, backups: backups.count });
   }
   const [documents, frameworks] = await Promise.all([
     prisma.libraryDocument.findMany({ where: { companyId } }),
